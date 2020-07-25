@@ -31,3 +31,21 @@ Pre-built debug apk available at http://bit.ly/KivyRemote2
 
 If you want to compile a release version for sharing, just replace `debug
 installd` by `release`, and sign the APK!
+
+Using on AS emulator
+--------------------
+
+- Set up an emulator with Android studio.
+- Launch the emulator.
+- Deploy the application
+    buildozer android deploy run logcat >& run.log
+- Set up port forwarding (Code is from the file shown)
+    $ telnet localhost 5554
+    auth <code>
+    redir add tcp:8000:8000
+    ^C
+- Connect to host
+    ssh -p 8000 admin@localhost
+
+
+
