@@ -3,6 +3,7 @@ from pythonforandroid.toolchain import shprint, current_directory, info
 from pythonforandroid.patching import will_build
 import sh
 from os.path import join
+import glob
 
 
 class JPypeRecipe(CppCompiledComponentsPythonRecipe):
@@ -15,20 +16,34 @@ class JPypeRecipe(CppCompiledComponentsPythonRecipe):
 
     call_hostpython_via_targetpython = False
     ignore_setup_py = False
+    need_stl_shared = True
 
     def build_compiled_components(self, arch):
-         info('Building compiled components in {}'.format(self.name))
+        info('Building compiled components in {}'.format(self.name))
 
-         env = self.get_recipe_env(arch)
-         hostpython = sh.Command(self.hostpython_location)
-         with current_directory(self.get_build_dir(arch.arch)):
-              if self.install_in_hostpython:
-                   shprint(hostpython, 'setup.py', 'clean', '--all', _env=env)
-              shprint(hostpython, 'setup.py', self.build_cmd, '-v', '--android',
-                  _env=env, *self.setup_extra_args)
-              build_dir = glob.glob('build/lib.*')[0]
-              shprint(sh.find, build_dir, '-name', '"*.o"', '-exec',
-                  env['STRIP'], '{}', ';', _env=env)
+        env = self.get_recipe_env(arch)
+        hostpython = sh.Command(self.hostpython_location)
+        with current_directory(self.get_build_dir(arch.arch)):
+             if self.install_in_hostpython:
+                  shprint(hostpython, 'setup.py', 'clean', '--all', _env=env)
+             shprint(hostpython, 'setup.py', self.build_cmd, '-v', '--android',
+                 _env=env, *self.setup_extra_args)
+             build_dir = glob.glob('build/lib.*')[0]
+             shprint(sh.find, build_dir, '-name', '"*.o"', '-exec',
+                 env['STRIP'], '{}', ';', _env=env)
+
+
+    def get_recipe_env(self, arch=None, with_flags_in_cc=True):
+        env = super().get_recipe_env(arch, with_flags_in_cc)
+        env['CFLAGS'] += ' -I{}'.format(self.stl_include_dir)
+        env['CFLAGS'] += ' -frtti -fexceptions'
+        env['LDFLAGS'] += ' -L{}'.format(self.get_stl_lib_dir(arch))
+        env['LDFLAGS'] += ' -l{}'.format(self.stl_lib_name)
+        return env
+
+    # avoid the cache for now
+    def should_build(self, arch):
+        return True
 
     # def postbuild_arch(self, arch):
     #      super().postbuild_arch(arch)
