@@ -10,7 +10,7 @@ package.name = remoteshell
 package.domain = org.kivy
 
 # indicate where the source code is living
-source.dir = .
+source.dir = app
 source.include_exts = py,png,kv,rst
 
 # search the version information into the source code
