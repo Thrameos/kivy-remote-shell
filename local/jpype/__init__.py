@@ -32,18 +32,33 @@ class JPypeRecipe(CppCompiledComponentsPythonRecipe):
              shprint(sh.find, build_dir, '-name', '"*.o"', '-exec',
                  env['STRIP'], '{}', ';', _env=env)
 
+    def install_libraries(self, arch):
+        super().install_libraries(arch)
+
+        # Move the jar file to a staging area
+        pythonHome = self.ctx.get_python_install_dir()
+        jarHome = self.ctx.jar_dir
+        print(pythonHome)
+        print(jarHome)
+        shprint(sh.mv, join(pythonHome, 'org.jpype.jar'), jarHome)
 
     def get_recipe_env(self, arch=None, with_flags_in_cc=True):
         env = super().get_recipe_env(arch, with_flags_in_cc)
-        env['CFLAGS'] += ' -I{}'.format(self.stl_include_dir)
-        env['CFLAGS'] += ' -frtti -fexceptions'
-        env['LDFLAGS'] += ' -L{}'.format(self.get_stl_lib_dir(arch))
-        env['LDFLAGS'] += ' -l{}'.format(self.stl_lib_name)
+        #env['LDFLAGS'] += ' -L{}'.format(self.ctx.get_libs_dir(arch.arch))
+        env['LDFLAGS'] += ' -L{}'.format(join(self.ctx.bootstrap.build_dir, "libs", arch.arch))
         return env
 
     # avoid the cache for now
     def should_build(self, arch):
         return True
+
+    def postbuild_arch(self, arch):
+        super().postbuild_arch(arch)
+        info("Copying JPype java class to classes build dir '%s'"%self.ctx.javaclass_dir)
+        info("From %s"%self.get_build_dir(arch.arch))
+        with current_directory(self.get_build_dir(arch.arch)):
+            shprint(sh.cp, '-r', join('build','temp.linux-x86_64-3.8','org.jpype','classes','org'), self.ctx.javaclass_dir)
+
 
     # def postbuild_arch(self, arch):
     #      super().postbuild_arch(arch)

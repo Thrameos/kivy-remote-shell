@@ -33,6 +33,11 @@ fullscreen=True
 p4a.branch = develop
 p4a.local_recipes = local
 
+# FIXME this next line is to use local copy, remove me
+p4a.source_dir = ~/devel/python-for-android
+android.add_jars = .buildozer/android/platform/build-armeabi-v7a/build/jar_collections/remoteshell/*.jar
+android.add_compile_options = "sourceCompatibility JavaVersion.VERSION_1_8", "targetCompatibility JavaVersion.VERSION_1_8"
+
 
 #presplash.filename= 
 
