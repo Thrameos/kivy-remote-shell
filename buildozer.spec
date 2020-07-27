@@ -18,7 +18,7 @@ version.regex = __version__ = '(.*)'
 version.filename = %(source.dir)s/main.py
 
 # requirements of the app
-requirements = android,cryptography,pyasn1,bcrypt,attrs,twisted,kivy,docutils,pygments,cffi,jpype
+requirements = android,cryptography,pyasn1,bcrypt,attrs,twisted,kivy,docutils,pygments,cffi,jpype,unittest
 
 # android specific
 android.permissions = INTERNET, WAKE_LOCK, CAMERA, VIBRATE, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION, SEND_SMS, CALL_PRIVILEGED, CALL_PHONE, BLUETOOTH
@@ -35,7 +35,7 @@ p4a.local_recipes = local
 
 # FIXME this next line is to use local copy, remove me
 p4a.source_dir = ~/devel/python-for-android
-android.add_jars = .buildozer/android/platform/build-armeabi-v7a/build/jar_collections/remoteshell/*.jar
+android.add_jars = .buildozer/android/platform/build-armeabi-v7a/build/jar_collections/remoteshell/*.jar, jars/jpype.test.jar
 android.add_compile_options = "sourceCompatibility JavaVersion.VERSION_1_8", "targetCompatibility JavaVersion.VERSION_1_8"
 
 
