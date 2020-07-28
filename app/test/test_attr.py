@@ -16,7 +16,7 @@
 #
 # *****************************************************************************
 import jpype
-from jpype import JString, java, JArray, JClass
+from jpype import JString, JArray, JClass
 import sys
 import time
 from . import common
@@ -108,7 +108,7 @@ class AttributeTestCase(common.JPypeTestCase):
         self.assertEqual(h.stringValue, "Foo")
 
     def testSetStaticValue(self):
-        JClass('jpype.attr.Test1').objectValue = java.lang.Integer(43)
+        JClass('jpype.attr.Test1').objectValue = JClass('java.lang.Integer')(43)
         self.assertEqual(str(JClass('jpype.attr.Test1').objectValue), "43")
         JClass('jpype.attr.Test1').reset()
 
@@ -124,7 +124,7 @@ class AttributeTestCase(common.JPypeTestCase):
 
     def testCallWithClass(self):
         h = JClass('jpype.attr.Test1')()
-        h.callWithClass(java.lang.Comparable)
+        h.callWithClass(JClass('java.lang.Comparable'))
 
     def testCallSuperclassMethod(self):
         h = JClass('jpype.attr.Test2')()
@@ -279,11 +279,11 @@ class AttributeTestCase(common.JPypeTestCase):
             inst = byte_buffer.allocate(1024 * 1024 * 100)
             # passing the object back to java seems to stop it being collected
             result = h.callWithSomething(inst)
-        rt = jpype.java.lang.Runtime.getRuntime()
+        rt = JClass('java.lang.Runtime').getRuntime()
         free = rt.freeMemory()
         for x in range(0, 10 * free // block_size):
             allocate_then_free()
 
     def testSyntheticMethod(self):
         h = jpype.JClass('jpype.attr.SyntheticMethods$GenericImpl')()
-        h.foo(jpype.java.util.ArrayList())
+        h.foo(JClass('java.util.ArrayList')())
