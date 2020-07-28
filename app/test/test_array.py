@@ -20,8 +20,7 @@ import jpype
 import _jpype
 import unittest
 from jpype.types import *
-from jpype import JPackage, java
-import common
+from . import common
 try:
     import numpy as np
 except ImportError:
@@ -203,22 +202,18 @@ class ArrayTestCase(unittest.TestCase):
 
     def testReadArray(self):
         t = JClass("jpype.array.TestArray")()
-        self.assertNotIsInstance(t, JPackage)
-
         self.assertCountEqual(self.VALUES, t.i)
-
         self.assertEqual(t.i[0], self.VALUES[0])
         self.assertCountEqual(self.VALUES[1:-2], t.i[1:-2])
 
     def testEmptyObjectArray(self):
         ''' Test for strange crash reported in bug #1089302'''
-        Test2 = jpype.JPackage('jpype.array').Test2
+        Test2 = JClass('jpype.array.Test2')
         test = Test2()
         test.test(test.getValue())
 
     def testWriteArray(self):
         t = JClass("jpype.array.TestArray")()
-        self.assertNotIsInstance(t, JPackage)
 
         t.i[0] = 32
         self.assertEqual(t.i[0], 32)
@@ -230,44 +225,42 @@ class ArrayTestCase(unittest.TestCase):
         self.assertCountEqual(t.i[:5], (32, 33, 34, 1324, 424))
 
     def testObjectArraySimple(self):
-        a = JArray(java.lang.String, 1)(2)
+        a = JArray(JClass('java.lang.String'), 1)(2)
         a[1] = "Foo"
         self.assertEqual("Foo", a[1])
 
     def testIterateArray(self):
         t = JClass("jpype.array.TestArray")()
-        self.assertFalse(isinstance(t, JPackage))
-
         for i in t.i:
             self.assertNotEqual(i, 0)
 
     def testGetSubclass(self):
         t = JClass("jpype.array.TestArray")()
         v = t.getSubClassArray()
-        self.assertTrue(isinstance(v[0], jpype.java.lang.Integer))
+        self.assertTrue(isinstance(v[0], JClass('java.lang.Integer')))
 
     def testGetArrayAsObject(self):
         t = JClass("jpype.array.TestArray")()
         v = t.getArrayAsObject()
 
     def testJArrayPythonTypes(self):
-        self.assertEqual(jpype.JArray(
+        self.assertEqual(JArray(
             object).class_.getComponentType(), JClass('java.lang.Object'))
-        self.assertEqual(jpype.JArray(
+        self.assertEqual(JArray(
             float).class_.getComponentType(), JClass('java.lang.Double').TYPE)
-        self.assertEqual(jpype.JArray(
+        self.assertEqual(JArray(
             str).class_.getComponentType(), JClass('java.lang.String'))
-        self.assertEqual(jpype.JArray(
+        self.assertEqual(JArray(
             type).class_.getComponentType(), JClass('java.lang.Class'))
 
     def testObjectArrayInitial(self):
-        l1 = java.util.ArrayList()
+        l1 = JClass('java.util.ArrayList')()
         l1.add(0)
-        l2 = java.util.ArrayList()
+        l2 = JClass('java.util.ArrayList')()
         l2.add(42)
-        l3 = java.util.ArrayList()
+        l3 = JClass('java.util.ArrayList')()
         l3.add(13)
-        jarr = jpype.JArray(java.util.ArrayList, 1)([l1, l2, l3])
+        jarr = JArray(JClass('java.util.ArrayList'), 1)([l1, l2, l3])
 
         self.assertEqual(l1, jarr[0])
         self.assertEqual(l2, jarr[1])
@@ -278,48 +271,48 @@ class ArrayTestCase(unittest.TestCase):
         import numpy as np
         n = 100
         a = np.random.randint(-128, 127, size=n).astype(np.byte)
-        jarr = jpype.JArray(jpype.JByte)(n)
+        jarr = JArray(jpype.JByte)(n)
         jarr[:] = a
         self.assertCountEqual(a, jarr)
 
     def testArrayCtor1(self):
-        jobject = jpype.JClass('java.lang.Object')
-        jarray = jpype.JArray(jobject)
-        self.assertTrue(issubclass(jarray, jpype.JArray))
-        self.assertTrue(isinstance(jarray(10), jpype.JArray))
+        jobject = JClass('java.lang.Object')
+        jarray = JArray(jobject)
+        self.assertTrue(issubclass(jarray, JArray))
+        self.assertTrue(isinstance(jarray(10), JArray))
 
     def testArrayCtor2(self):
-        jobject = jpype.JClass('java.util.List')
-        jarray = jpype.JArray(jobject)
-        self.assertTrue(issubclass(jarray, jpype.JArray))
-        self.assertTrue(isinstance(jarray(10), jpype.JArray))
+        jobject = JClass('java.util.List')
+        jarray = JArray(jobject)
+        self.assertTrue(issubclass(jarray, JArray))
+        self.assertTrue(isinstance(jarray(10), JArray))
 
     def testArrayCtor3(self):
-        jarray = jpype.JArray("java.lang.Object")
-        self.assertTrue(issubclass(jarray, jpype.JArray))
-        self.assertTrue(isinstance(jarray(10), jpype.JArray))
+        jarray = JArray("java.lang.Object")
+        self.assertTrue(issubclass(jarray, JArray))
+        self.assertTrue(isinstance(jarray(10), JArray))
 
     def testArrayCtor4(self):
-        jarray = jpype.JArray(jpype.JObject)
-        self.assertTrue(issubclass(jarray, jpype.JArray))
-        self.assertTrue(isinstance(jarray(10), jpype.JArray))
+        jarray = JArray(jpype.JObject)
+        self.assertTrue(issubclass(jarray, JArray))
+        self.assertTrue(isinstance(jarray(10), JArray))
 
     def testArrayCtor5(self):
-        jarray0 = jpype.JArray("java.lang.Object")
-        jarray = jpype.JArray(jarray0)
-        self.assertTrue(issubclass(jarray, jpype.JArray))
-        self.assertTrue(isinstance(jarray(10), jpype.JArray))
+        jarray0 = JArray("java.lang.Object")
+        jarray = JArray(jarray0)
+        self.assertTrue(issubclass(jarray, JArray))
+        self.assertTrue(isinstance(jarray(10), JArray))
 
     def testObjectNullArraySlice(self):
         # Check for bug in 0.7.0
-        array = jpype.JArray(jpype.JObject)([None, ])
+        array = JArray(JObject)([None, ])
         self.assertEqual(tuple(array[:]), (None,))
 
     def testJArrayBadType(self):
         class Bob(object):
             pass
         with self.assertRaises(TypeError):
-            jpype.JArray(Bob)
+            JArray(Bob)
 
     def testJArrayBadSlice(self):
         ja = JArray(JObject)(5)
@@ -535,21 +528,21 @@ class ArrayTestCase(unittest.TestCase):
 
     def testJArrayDimTooBig(self):
         with self.assertRaises(ValueError):
-            jpype.JArray(jpype.JInt, 10000)
+            JArray(JInt, 10000)
 
     def testJArrayDimWrong(self):
         with self.assertRaises(TypeError):
-            jpype.JArray(jpype.JInt, 1.5)
+            JArray(JInt, 1.5)
 
     def testJArrayArgs(self):
         with self.assertRaises(TypeError):
-            jpype.JArray(jpype.JInt, 1, 'f')
+            JArray(JInt, 1, 'f')
 
     def testJArrayTypeBad(self):
         class John(object):
             pass
         with self.assertRaises(TypeError):
-            jpype.JArray(John)
+            JArray(John)
 
     @common.requireNumpy
     def testZeroArray(self):

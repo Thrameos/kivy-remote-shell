@@ -48,4 +48,12 @@ Using on AS emulator
     ssh -p 8000 admin@localhost
 
 
+Running the test cases
+----------------------
+
+>>> import unittest
+>>> import jpype
+>>> import test_array
+>>> suite = unittest.defaultTestLoader.loadTestsFromTestCase(test_array.ArrayTestCase)
+>>> unittest.TextTestRunner().run(suite)
 

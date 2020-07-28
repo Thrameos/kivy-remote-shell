@@ -18,7 +18,7 @@ version.regex = __version__ = '(.*)'
 version.filename = %(source.dir)s/main.py
 
 # requirements of the app
-requirements = android,cryptography,pyasn1,bcrypt,attrs,twisted,kivy,docutils,pygments,cffi,jpype,unittest
+requirements = android,cryptography,pyasn1,bcrypt,attrs,twisted,kivy,docutils,pygments,cffi,jpype
 
 # android specific
 android.permissions = INTERNET, WAKE_LOCK, CAMERA, VIBRATE, ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION, SEND_SMS, CALL_PRIVILEGED, CALL_PHONE, BLUETOOTH
