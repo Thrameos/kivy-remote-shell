@@ -194,7 +194,7 @@ class JClassTestCase(common.JPypeTestCase):
 
     def testAssignClass(self):
         self.fixture.object_field = JClass("java.lang.StringBuilder")
-        self.assertIsInstance(self.fixture.object_field, jpype.java.lang.Class)
+        self.assertIsInstance(self.fixture.object_field, JClass('java.lang.Class'))
         self.assertEqual(self.fixture.object_field,
                          JClass("java.lang.StringBuilder"))
 

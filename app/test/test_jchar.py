@@ -203,7 +203,7 @@ class JCharTestCase(common.JPypeTestCase):
     def testPass(self):
         fixture = jpype.JClass('jpype.common.Fixture')()
         self.assertEqual(type(fixture.callChar(self.nc)), JChar)
-        self.assertEqual(type(fixture.callObject(self.nc)), jpype.java.lang.Character)
+        self.assertEqual(type(fixture.callObject(self.nc)), JClass('java.lang.Character'))
 
     def check(self, u, v0, v1, v2):
         self.assertEqual(v1, u)
@@ -241,7 +241,7 @@ class JCharTestCase(common.JPypeTestCase):
 class JCharBoxedTestCase(common.JPypeTestCase):
     def setUp(self):
         common.JPypeTestCase.setUp(self)
-        self.nc = jpype.java.lang.Character('B')
+        self.nc = JClass('java.lang.Character')('B')
 
     def testStr(self):
         self.assertEqual(type(str(self.nc)), str)
@@ -365,7 +365,7 @@ class JCharBoxedTestCase(common.JPypeTestCase):
 class JCharBoxedNullTestCase(common.JPypeTestCase):
     def setUp(self):
         common.JPypeTestCase.setUp(self)
-        self.nc = jpype.JObject(None, jpype.java.lang.Character)
+        self.nc = jpype.JObject(None, JClass('java.lang.Character'))
 
     def testStr(self):
         self.assertEqual(type(str(self.nc)), str)

@@ -179,7 +179,7 @@ class OverloadTestCase(common.JPypeTestCase):
         test1 = JClass('jpype.overloads.Test1')()
         self.assertEqual('String[]', test1.testListVSArray(['a', 'b']))
         self.assertEqual('List<String>', test1.testListVSArray(
-            jpype.java.util.Arrays.asList(['a', 'b'])))
+            JClass('java.util.Arrays').asList(['a', 'b'])))
 
     def testDefaultMethods(self):
         try:

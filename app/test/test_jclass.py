@@ -186,16 +186,16 @@ class JClassTestCase(common.JPypeTestCase):
     def testJavaConversionFault(self):
         _jpype.fault("JPClass::findJavaConversion")
         with self.assertRaisesRegex(SystemError, "fault"):
-            print(jpype.java.lang.Class._canConvertToJava(None))
+            print(JClass('java.lang.Class')._canConvertToJava(None))
 
     def testJavaConversion(self):
         a = JString("a")
         self.assertEqual(
-            jpype.java.lang.Class._canConvertToJava(object()), "none")
+            JClass('java.lang.Class')._canConvertToJava(object()), "none")
         self.assertEqual(
-            jpype.java.lang.Class._canConvertToJava(a.getClass()), "exact")
+            JClass('java.lang.Class')._canConvertToJava(a.getClass()), "exact")
         self.assertEqual(
-            jpype.java.lang.Class._canConvertToJava(JString), "exact")
+            JClass('java.lang.Class')._canConvertToJava(JString), "exact")
 
     def testInnerClass(self):
         # This tests for problems when the inner class implements the

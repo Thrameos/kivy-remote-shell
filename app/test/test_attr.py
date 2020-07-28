@@ -26,13 +26,14 @@ class AttributeTestCase(common.JPypeTestCase):
     def setUp(self):
         common.JPypeTestCase.setUp(self)
 
-    def testWithBufferStrategy(self):
-        j = JClass("jpype.attr.ClassWithBuffer")
-        self.assertIsNone(j().bufferStrategy)
+    # AWT missing on android
+    #def testWithBufferStrategy(self):
+    #    j = JClass("jpype.attr.ClassWithBuffer")
+    #    self.assertIsNone(j().bufferStrategy)
 
     def testCallOverloadedMethodWithCovariance(self):
         # This is a JDk5-specific problem.
-        h = jpype.java.lang.StringBuffer()
+        h = JClass('java.lang.StringBuffer')()
         h.delete(0, 0)
 
     def testCallStaticString(self):
@@ -199,7 +200,7 @@ class AttributeTestCase(common.JPypeTestCase):
         self.assertEqual(False, h.mBooleanValue)
 
     def testCreateDate(self):
-        d = jpype.java.util.Date(1448799485000)
+        d = JClass('java.util.Date')(1448799485000)
         self.assertEqual(1448799485000, d.getTime())
 
     def testCharAttribute(self):
@@ -223,7 +224,7 @@ class AttributeTestCase(common.JPypeTestCase):
         self.assertEqual(h.callWithSomething(
             JClass('jpype.attr.Test1')), u"Class")
         result = h.callWithSomething(jpype.JObject(JClass('jpype.attr.Test1'),
-                                                   jpype.java.lang.Object))
+                                                   JClass('java.lang.Object')))
         self.assertEqual(result, u"Object")
 
     def testToString(self):

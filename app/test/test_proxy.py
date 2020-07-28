@@ -386,9 +386,9 @@ class ProxyTestCase(common.JPypeTestCase):
 
         arr = JArray(JString)(["a", "b"])
         with self.assertRaises(TypeError):
-            java.util.Arrays.sort(arr, TooManyParams())
+            JClass('java.util.Arrays').sort(arr, TooManyParams())
         with self.assertRaises(TypeError):
-            java.util.Arrays.sort(arr, TooFewParams())
+            JClass('java.util.Arrays').sort(arr, TooFewParams())
 
     def testUnwrap(self):
         fixture = JClass("jpype.common.Fixture")()
