@@ -1,0 +1,1412 @@
+diff --git a/jpype/__init__.py b/jpype/__init__.py
+index 306b10b..4f4852d 100644
+--- a/jpype/__init__.py
++++ b/jpype/__init__.py
+@@ -20,8 +20,6 @@ from ._jinit import *
+ from ._jpackage import *
+ from ._jproxy import *
+ from ._core import *
+-from ._gui import *
+-from ._classpath import *
+ from ._jclass import *
+ from ._jobject import *
+ # There is a bug in lgtm with __init__ imports.  It will be fixed next month.
+@@ -40,27 +38,19 @@ from . import _jio          # lgtm [py/import-own-module]
+ from . import protocol      # lgtm [py/import-own-module]
+ from . import _jthread      # lgtm [py/import-own-module]
+ 
+-__all__ = ['java', 'javax']
++__all__=[]
+ __all__.extend(_jinit.__all__)
+ __all__.extend(_core.__all__)
+-__all__.extend(_classpath.__all__)
+ __all__.extend(types.__all__)
+ __all__.extend(_jproxy.__all__)
+ __all__.extend(_jpackage.__all__)
+ __all__.extend(_jclass.__all__)
+ __all__.extend(_jcustomizer.__all__)
+-__all__.extend(_gui.__all__)
+ 
+ __version__ = "1.0.2_dev0"
+ __version_info__ = __version__.split('.')
+ 
+ 
+-# FIXME these should be deprecated. The old JPackage system is only for
+-#  python2 series and generates lots of deceptive classes.  At some point
+-#  these two are going to have to go away.
+-java = JPackage("java", strict=True)
+-javax = JPackage("javax", strict=True)
+-
+ JMethod = _jpype._JMethod
+ JField = _jpype._JField
+ 
+diff --git a/jpype/_core.py b/jpype/_core.py
+index d279b85..acf4431 100644
+--- a/jpype/_core.py
++++ b/jpype/_core.py
+@@ -16,21 +16,17 @@
+ #
+ # *****************************************************************************
+ import sys
+-import atexit
+ import _jpype
+ from . import types as _jtypes
+-from . import _classpath
+ from . import _jcustomizer
+ from . import _jinit
+ from . import _pykeywords
++from . import imports
+ 
+ from ._jvmfinder import *
+ 
+ __all__ = [
+-    'isJVMStarted', 'startJVM', 'shutdownJVM',
+-    'getDefaultJVMPath', 'getJVMVersion', 'isThreadAttachedToJVM', 'attachThreadToJVM',
+-    'detachThreadFromJVM', 'synchronized',
+-    'JVMNotFoundException', 'JVMNotSupportedException', 'JVMNotRunning'
++    'isJVMStarted', 'getJVMVersion', 'synchronized',
+ ]
+ 
+ 
+@@ -93,135 +89,9 @@ def isJVMStarted():
+     return _jpype.isStarted()
+ 
+ 
+-def _hasClassPath(args):
+-    for i in args:
+-        if i.startswith('-Djava.class.path'):
+-            return True
+-    return False
+-
+-
+-def _handleClassPath(clsList):
+-    out = []
+-    for s in clsList:
+-        if not isinstance(s, str):
+-            raise TypeError("Classpath elements must be strings")
+-        if s.endswith('*'):
+-            import glob
+-            out.extend(glob.glob(s + '.jar'))
+-        else:
+-            out.append(s)
+-    return _classpath._SEP.join(out)
+-
+-
+ _JVM_started = False
+ 
+ 
+-def startJVM(*args, **kwargs):
+-    """
+-    Starts a Java Virtual Machine.  Without options it will start
+-    the JVM with the default classpath and jvmpath.
+-
+-    The default classpath is determined by ``jpype.getClassPath()``.
+-    The default jvmpath is determined by ``jpype.getDefaultJVMPath()``.
+-
+-    Parameters:
+-     *args (Optional, str[]): Arguments to give to the JVM.
+-        The first argument may be the path the JVM.
+-
+-    Keyword Arguments:
+-      jvmpath (str):  Path to the jvm library file,
+-        Typically one of (``libjvm.so``, ``jvm.dll``, ...)
+-        Using None will apply the default jvmpath.
+-      classpath (str,[str]): Set the classpath for the JVM.
+-        This will override any classpath supplied in the arguments
+-        list. A value of None will give no classpath to JVM.
+-      ignoreUnrecognized (bool): Option to ignore
+-        invalid JVM arguments. Default is False.
+-      convertStrings (bool): Option to force Java strings to
+-        cast to Python strings. This option is to support legacy code
+-        for which conversion of Python strings was the default. This
+-        will globally change the behavior of all calls using
+-        strings, and a value of True is NOT recommended for newly
+-        developed code.
+-
+-        The default value for this option during 0.7 series is
+-        True.  The option will be False starting in 0.8. A
+-        warning will be issued if this option is not specified
+-        during the transition period.
+-
+-
+-    Raises:
+-      OSError: if the JVM cannot be started or is already running.
+-      TypeError: if an invalid keyword argument is supplied
+-        or a keyword argument conflicts with the arguments.
+-
+-     """
+-    if _jpype.isStarted():
+-        raise OSError('JVM is already started')
+-    global _JVM_started
+-    if _JVM_started:
+-        raise OSError('JVM cannot be restarted')
+-
+-    args = list(args)
+-
+-    # JVM path
+-    jvmpath = None
+-    if args:
+-        # jvm is the first argument the first argument is a path or None
+-        if not args[0] or not args[0].startswith('-'):
+-            jvmpath = args.pop(0)
+-    if 'jvmpath' in kwargs:
+-        if jvmpath:
+-            raise TypeError('jvmpath specified twice')
+-        jvmpath = kwargs.pop('jvmpath')
+-    if not jvmpath:
+-        jvmpath = getDefaultJVMPath()
+-
+-    # Classpath handling
+-    if _hasClassPath(args):
+-        # Old style, specified in the arguments
+-        if 'classpath' in kwargs:
+-            # Cannot apply both styles, conflict
+-            raise TypeError('classpath specified twice')
+-        classpath = None
+-    elif 'classpath' in kwargs:
+-        # New style, as a keywork
+-        classpath = kwargs.pop('classpath')
+-    else:
+-        # Not speficied at all, use the default classpath
+-        classpath = _classpath.getClassPath()
+-
+-    # Handle strings and list of strings.
+-    if classpath:
+-        if isinstance(classpath, str):
+-            args.append('-Djava.class.path=%s' % _handleClassPath([classpath]))
+-        elif hasattr(classpath, '__iter__'):
+-            args.append('-Djava.class.path=%s' % _handleClassPath(classpath))
+-        else:
+-            raise TypeError("Unknown class path element")
+-
+-    ignoreUnrecognized = kwargs.pop('ignoreUnrecognized', False)
+-    convertStrings = kwargs.pop('convertStrings', False)
+-
+-    if kwargs:
+-        raise TypeError("startJVM() got an unexpected keyword argument '%s'"
+-                        % (','.join([str(i) for i in kwargs])))
+-
+-    try:
+-        _jpype.startup(jvmpath, tuple(args),
+-                       ignoreUnrecognized, convertStrings)
+-        initializeResources()
+-    except RuntimeError as ex:
+-        source = str(ex)
+-        if "UnsupportedClassVersion" in source:
+-            import re
+-            match = re.search(r"([0-9]+)\.[0-9]+", source)
+-            if match:
+-                version = int(match.group(1)) - 44
+-                raise RuntimeError("%s is older than required Java version %d" % (
+-                    jvmpath, version)) from ex
+-        raise
+-
+ 
+ def initializeResources():
+     global _JVM_started
+@@ -306,75 +176,6 @@ def initializeResources():
+     _JVM_started = True
+ 
+ 
+-def shutdownJVM():
+-    """ Shuts down the JVM.
+-
+-    This method shuts down the JVM and disables access to existing
+-    Java objects. Due to limitations in the JPype, it is not possible to
+-    restart the JVM after being terminated.
+-    """
+-    import threading
+-    if threading.current_thread() is not threading.main_thread():
+-        raise RuntimeError("Shutdown must be called from main thread")
+-    _jpype.shutdown()
+-
+-
+-# In order to shutdown cleanly we need the reference queue stopped
+-# otherwise, we can experience a crash if a Java thread is waiting
+-# for the GIL.
+-def _JTerminate():
+-    try:
+-        _jpype.shutdown()
+-    except RuntimeError:
+-        pass
+-
+-
+-atexit.register(_JTerminate)
+-
+-
+-@deprecated("java.lang.Thread.isAttached")
+-def isThreadAttachedToJVM():
+-    """ Checks if a thread is attached to the JVM.
+-
+-    Python automatically attaches threads when a Java method is called.
+-    This creates a resource in Java for the Python thread. This method
+-    can be used to check if a Python thread is currently attached so that
+-    it can be disconnected prior to thread termination to prevent leaks.
+-
+-    Returns:
+-      True if the thread is attached to the JVM, False if the thread is
+-      not attached or the JVM is not running.
+-    """
+-    return _jpype.isThreadAttachedToJVM()
+-
+-
+-@deprecated("java.lang.Thread.attach")
+-def attachThreadToJVM():
+-    """ Attaches a thread to the JVM.
+-
+-    The function manually connects a thread to the JVM to allow access to
+-    Java objects and methods. JPype automatically attaches when a Java
+-    resource is used, so a call to this is usually not needed.
+-
+-    Raises:
+-      RuntimeError: If the JVM is not running.
+-    """
+-    _jpype.attachThreadToJVM()
+-
+-
+-@deprecated("java.lang.Thread.detach")
+-def detachThreadFromJVM():
+-    """ Detaches a thread from the JVM.
+-
+-    This function detaches the thread and frees the associated resource in
+-    the JVM. For codes making heavy use of threading this should be used
+-    to prevent resource leaks. The thread can be reattached, so there
+-    is no harm in detaching early or more than once. This method cannot fail
+-    and there is no harm in calling it when the JVM is not running.
+-    """
+-    _jpype.detachThreadFromJVM()
+-
+-
+ def synchronized(obj):
+     """ Creates a resource lock for a Java object.
+ 
+diff --git a/jpype/_jthread.py b/jpype/_jthread.py
+index 4c329ff..a3359bd 100644
+--- a/jpype/_jthread.py
++++ b/jpype/_jthread.py
+@@ -42,42 +42,3 @@ class _JThread(object):
+           not attached or the JVM is not running.
+         """
+         return _jpype.isThreadAttachedToJVM()
+-
+-    @staticmethod
+-    def attach():
+-        """ Attaches the current thread to the JVM as a user thread.
+-
+-        User threads that are attached to the JVM will prevent the JVM from
+-        shutting down until the thread is terminated or detached.  To convert
+-        a daemon thread to a main thread, the thread must first be detached.
+-
+-        Raises:
+-          RuntimeError: If the JVM is not running.
+-        """
+-        return _jpype.attachThreadToJVM()
+-
+-    @staticmethod
+-    def attachAsDaemon():
+-        """ Attaches the current thread to the JVM as a daemon.
+-
+-        Daemon threads act as background tasks and do not prevent the JVM from
+-        shutdown normally.  JPype automatically attaches any threads that call
+-        Java resources as daemon threads.  To convert a daemon thread to a user
+-        thread, the thread must first be detached.
+-
+-        Raises:
+-          RuntimeError: If the JVM is not running.
+-        """
+-        return _jpype.attachThreadAsDaemon()
+-
+-    @staticmethod
+-    def detach():
+-        """ Detaches a thread from the JVM.
+-
+-        This function detaches the thread and frees the associated resource in
+-        the JVM. For codes making heavy use of threading this should be used
+-        to prevent resource leaks. The thread can be reattached, so there
+-        is no harm in detaching early or more than once. This method cannot fail
+-        and there is no harm in calling it when the JVM is not running.
+-        """
+-        return _jpype.detachThreadFromJVM()
+diff --git a/jpype/imports.py b/jpype/imports.py
+index 8a73f99..4e19906 100644
+--- a/jpype/imports.py
++++ b/jpype/imports.py
+@@ -152,18 +152,9 @@ class _JImportLoader:
+     """ (internal) Finder hook for importlib. """
+ 
+     def find_spec(self, name, path, target=None):
+-        # If jvm is not started then we just check against the TLDs
+-        if not _jpype.isStarted():
+-            base = name.partition('.')[0]
+-            if not base in _JDOMAINS:
+-                return None
+-            raise ImportError("Attempt to create Java package '%s' without jvm" % name)
+-
+         # Check for aliases
+         if name in _JDOMAINS:
+             jname = _JDOMAINS[name]
+-            if not _jpype.isPackage(jname):
+-                raise ImportError("Java package '%s' not found, requested by alias '%s'" % (jname, name))
+             ms = _ModuleSpec(name, self)
+             ms._jname = jname
+             return ms
+@@ -172,12 +163,7 @@ class _JImportLoader:
+         parts = name.rpartition('.')
+ 
+         # Use the parent module to simplify name mangling
+-        if not parts[1] and _jpype.isPackage(parts[2]):
+-            ms = _ModuleSpec(name, self)
+-            ms._jname = name
+-            return ms
+-
+-        if not parts[1] and not _jpype.isPackage(parts[0]):
++        if not parts[1]:
+             return None
+ 
+         base = sys.modules.get(parts[0], None)
+@@ -192,16 +178,7 @@ class _JImportLoader:
+ 
+         # Using isPackage eliminates need for registering tlds
+         if not hasattr(base, parts[2]):
+-            # If the base is a Java package and it wasn't found in the
+-            # package using getAttr, then we need to emit an error
+-            # so we produce a meaningful diagnositic.
+-            try:
+-                # Use forname because it give better diagnostics
+-                cls = _jpype.JClass("java.lang.Class").forName(name)
+-                return _jpype.JClass(cls)
+-            # Not found is acceptable
+-            except Exception as ex:
+-                raise ImportError("Failed to import '%s'" % name) from ex
++            raise ImportError("Failed to import '%s'" % name)
+ 
+         # Import the java module
+         return _ModuleSpec(name, self)
+@@ -252,3 +229,5 @@ registerDomain('org')
+ registerDomain('mil')
+ registerDomain('edu')
+ registerDomain('net')
++registerDomain('android')
++registerDomain('dalvik')
+diff --git a/jpype/p0 b/jpype/p0
+new file mode 100644
+index 0000000..6da3c62
+--- /dev/null
++++ b/jpype/p0
+@@ -0,0 +1,358 @@
++diff --git a/jpype/__init__.py b/jpype/__init__.py
++index 306b10b..f724243 100644
++--- a/jpype/__init__.py
+++++ b/jpype/__init__.py
++@@ -20,8 +20,6 @@ from ._jinit import *
++ from ._jpackage import *
++ from ._jproxy import *
++ from ._core import *
++-from ._gui import *
++-from ._classpath import *
++ from ._jclass import *
++ from ._jobject import *
++ # There is a bug in lgtm with __init__ imports.  It will be fixed next month.
++@@ -43,13 +41,11 @@ from . import _jthread      # lgtm [py/import-own-module]
++ __all__ = ['java', 'javax']
++ __all__.extend(_jinit.__all__)
++ __all__.extend(_core.__all__)
++-__all__.extend(_classpath.__all__)
++ __all__.extend(types.__all__)
++ __all__.extend(_jproxy.__all__)
++ __all__.extend(_jpackage.__all__)
++ __all__.extend(_jclass.__all__)
++ __all__.extend(_jcustomizer.__all__)
++-__all__.extend(_gui.__all__)
++ 
++ __version__ = "1.0.2_dev0"
++ __version_info__ = __version__.split('.')
++diff --git a/jpype/_core.py b/jpype/_core.py
++index d279b85..10f0d01 100644
++--- a/jpype/_core.py
+++++ b/jpype/_core.py
++@@ -16,10 +16,8 @@
++ #
++ # *****************************************************************************
++ import sys
++-import atexit
++ import _jpype
++ from . import types as _jtypes
++-from . import _classpath
++ from . import _jcustomizer
++ from . import _jinit
++ from . import _pykeywords
++@@ -27,10 +25,7 @@ from . import _pykeywords
++ from ._jvmfinder import *
++ 
++ __all__ = [
++-    'isJVMStarted', 'startJVM', 'shutdownJVM',
++-    'getDefaultJVMPath', 'getJVMVersion', 'isThreadAttachedToJVM', 'attachThreadToJVM',
++-    'detachThreadFromJVM', 'synchronized',
++-    'JVMNotFoundException', 'JVMNotSupportedException', 'JVMNotRunning'
+++    'isJVMStarted', 'getJVMVersion', 'synchronized',
++ ]
++ 
++ 
++@@ -93,135 +88,9 @@ def isJVMStarted():
++     return _jpype.isStarted()
++ 
++ 
++-def _hasClassPath(args):
++-    for i in args:
++-        if i.startswith('-Djava.class.path'):
++-            return True
++-    return False
++-
++-
++-def _handleClassPath(clsList):
++-    out = []
++-    for s in clsList:
++-        if not isinstance(s, str):
++-            raise TypeError("Classpath elements must be strings")
++-        if s.endswith('*'):
++-            import glob
++-            out.extend(glob.glob(s + '.jar'))
++-        else:
++-            out.append(s)
++-    return _classpath._SEP.join(out)
++-
++-
++ _JVM_started = False
++ 
++ 
++-def startJVM(*args, **kwargs):
++-    """
++-    Starts a Java Virtual Machine.  Without options it will start
++-    the JVM with the default classpath and jvmpath.
++-
++-    The default classpath is determined by ``jpype.getClassPath()``.
++-    The default jvmpath is determined by ``jpype.getDefaultJVMPath()``.
++-
++-    Parameters:
++-     *args (Optional, str[]): Arguments to give to the JVM.
++-        The first argument may be the path the JVM.
++-
++-    Keyword Arguments:
++-      jvmpath (str):  Path to the jvm library file,
++-        Typically one of (``libjvm.so``, ``jvm.dll``, ...)
++-        Using None will apply the default jvmpath.
++-      classpath (str,[str]): Set the classpath for the JVM.
++-        This will override any classpath supplied in the arguments
++-        list. A value of None will give no classpath to JVM.
++-      ignoreUnrecognized (bool): Option to ignore
++-        invalid JVM arguments. Default is False.
++-      convertStrings (bool): Option to force Java strings to
++-        cast to Python strings. This option is to support legacy code
++-        for which conversion of Python strings was the default. This
++-        will globally change the behavior of all calls using
++-        strings, and a value of True is NOT recommended for newly
++-        developed code.
++-
++-        The default value for this option during 0.7 series is
++-        True.  The option will be False starting in 0.8. A
++-        warning will be issued if this option is not specified
++-        during the transition period.
++-
++-
++-    Raises:
++-      OSError: if the JVM cannot be started or is already running.
++-      TypeError: if an invalid keyword argument is supplied
++-        or a keyword argument conflicts with the arguments.
++-
++-     """
++-    if _jpype.isStarted():
++-        raise OSError('JVM is already started')
++-    global _JVM_started
++-    if _JVM_started:
++-        raise OSError('JVM cannot be restarted')
++-
++-    args = list(args)
++-
++-    # JVM path
++-    jvmpath = None
++-    if args:
++-        # jvm is the first argument the first argument is a path or None
++-        if not args[0] or not args[0].startswith('-'):
++-            jvmpath = args.pop(0)
++-    if 'jvmpath' in kwargs:
++-        if jvmpath:
++-            raise TypeError('jvmpath specified twice')
++-        jvmpath = kwargs.pop('jvmpath')
++-    if not jvmpath:
++-        jvmpath = getDefaultJVMPath()
++-
++-    # Classpath handling
++-    if _hasClassPath(args):
++-        # Old style, specified in the arguments
++-        if 'classpath' in kwargs:
++-            # Cannot apply both styles, conflict
++-            raise TypeError('classpath specified twice')
++-        classpath = None
++-    elif 'classpath' in kwargs:
++-        # New style, as a keywork
++-        classpath = kwargs.pop('classpath')
++-    else:
++-        # Not speficied at all, use the default classpath
++-        classpath = _classpath.getClassPath()
++-
++-    # Handle strings and list of strings.
++-    if classpath:
++-        if isinstance(classpath, str):
++-            args.append('-Djava.class.path=%s' % _handleClassPath([classpath]))
++-        elif hasattr(classpath, '__iter__'):
++-            args.append('-Djava.class.path=%s' % _handleClassPath(classpath))
++-        else:
++-            raise TypeError("Unknown class path element")
++-
++-    ignoreUnrecognized = kwargs.pop('ignoreUnrecognized', False)
++-    convertStrings = kwargs.pop('convertStrings', False)
++-
++-    if kwargs:
++-        raise TypeError("startJVM() got an unexpected keyword argument '%s'"
++-                        % (','.join([str(i) for i in kwargs])))
++-
++-    try:
++-        _jpype.startup(jvmpath, tuple(args),
++-                       ignoreUnrecognized, convertStrings)
++-        initializeResources()
++-    except RuntimeError as ex:
++-        source = str(ex)
++-        if "UnsupportedClassVersion" in source:
++-            import re
++-            match = re.search(r"([0-9]+)\.[0-9]+", source)
++-            if match:
++-                version = int(match.group(1)) - 44
++-                raise RuntimeError("%s is older than required Java version %d" % (
++-                    jvmpath, version)) from ex
++-        raise
++-
++ 
++ def initializeResources():
++     global _JVM_started
++@@ -306,75 +175,6 @@ def initializeResources():
++     _JVM_started = True
++ 
++ 
++-def shutdownJVM():
++-    """ Shuts down the JVM.
++-
++-    This method shuts down the JVM and disables access to existing
++-    Java objects. Due to limitations in the JPype, it is not possible to
++-    restart the JVM after being terminated.
++-    """
++-    import threading
++-    if threading.current_thread() is not threading.main_thread():
++-        raise RuntimeError("Shutdown must be called from main thread")
++-    _jpype.shutdown()
++-
++-
++-# In order to shutdown cleanly we need the reference queue stopped
++-# otherwise, we can experience a crash if a Java thread is waiting
++-# for the GIL.
++-def _JTerminate():
++-    try:
++-        _jpype.shutdown()
++-    except RuntimeError:
++-        pass
++-
++-
++-atexit.register(_JTerminate)
++-
++-
++-@deprecated("java.lang.Thread.isAttached")
++-def isThreadAttachedToJVM():
++-    """ Checks if a thread is attached to the JVM.
++-
++-    Python automatically attaches threads when a Java method is called.
++-    This creates a resource in Java for the Python thread. This method
++-    can be used to check if a Python thread is currently attached so that
++-    it can be disconnected prior to thread termination to prevent leaks.
++-
++-    Returns:
++-      True if the thread is attached to the JVM, False if the thread is
++-      not attached or the JVM is not running.
++-    """
++-    return _jpype.isThreadAttachedToJVM()
++-
++-
++-@deprecated("java.lang.Thread.attach")
++-def attachThreadToJVM():
++-    """ Attaches a thread to the JVM.
++-
++-    The function manually connects a thread to the JVM to allow access to
++-    Java objects and methods. JPype automatically attaches when a Java
++-    resource is used, so a call to this is usually not needed.
++-
++-    Raises:
++-      RuntimeError: If the JVM is not running.
++-    """
++-    _jpype.attachThreadToJVM()
++-
++-
++-@deprecated("java.lang.Thread.detach")
++-def detachThreadFromJVM():
++-    """ Detaches a thread from the JVM.
++-
++-    This function detaches the thread and frees the associated resource in
++-    the JVM. For codes making heavy use of threading this should be used
++-    to prevent resource leaks. The thread can be reattached, so there
++-    is no harm in detaching early or more than once. This method cannot fail
++-    and there is no harm in calling it when the JVM is not running.
++-    """
++-    _jpype.detachThreadFromJVM()
++-
++-
++ def synchronized(obj):
++     """ Creates a resource lock for a Java object.
++ 
++diff --git a/jpype/_jthread.py b/jpype/_jthread.py
++index 4c329ff..a3359bd 100644
++--- a/jpype/_jthread.py
+++++ b/jpype/_jthread.py
++@@ -42,42 +42,3 @@ class _JThread(object):
++           not attached or the JVM is not running.
++         """
++         return _jpype.isThreadAttachedToJVM()
++-
++-    @staticmethod
++-    def attach():
++-        """ Attaches the current thread to the JVM as a user thread.
++-
++-        User threads that are attached to the JVM will prevent the JVM from
++-        shutting down until the thread is terminated or detached.  To convert
++-        a daemon thread to a main thread, the thread must first be detached.
++-
++-        Raises:
++-          RuntimeError: If the JVM is not running.
++-        """
++-        return _jpype.attachThreadToJVM()
++-
++-    @staticmethod
++-    def attachAsDaemon():
++-        """ Attaches the current thread to the JVM as a daemon.
++-
++-        Daemon threads act as background tasks and do not prevent the JVM from
++-        shutdown normally.  JPype automatically attaches any threads that call
++-        Java resources as daemon threads.  To convert a daemon thread to a user
++-        thread, the thread must first be detached.
++-
++-        Raises:
++-          RuntimeError: If the JVM is not running.
++-        """
++-        return _jpype.attachThreadAsDaemon()
++-
++-    @staticmethod
++-    def detach():
++-        """ Detaches a thread from the JVM.
++-
++-        This function detaches the thread and frees the associated resource in
++-        the JVM. For codes making heavy use of threading this should be used
++-        to prevent resource leaks. The thread can be reattached, so there
++-        is no harm in detaching early or more than once. This method cannot fail
++-        and there is no harm in calling it when the JVM is not running.
++-        """
++-        return _jpype.detachThreadFromJVM()
++diff --git a/native/java/org/jpype/JPypeContext.java b/native/java/org/jpype/JPypeContext.java
++index 3ced1aa..ffeafaa 100644
++--- a/native/java/org/jpype/JPypeContext.java
+++++ b/native/java/org/jpype/JPypeContext.java
++@@ -26,7 +26,6 @@ import java.util.Arrays;
++ import java.util.List;
++ import java.util.Map;
++ import java.util.concurrent.atomic.AtomicInteger;
++-import org.jpype.classloader.DynamicClassLoader;
++ import org.jpype.manager.TypeFactory;
++ import org.jpype.manager.TypeFactoryNative;
++ import org.jpype.manager.TypeManager;
++@@ -75,7 +74,6 @@ public class JPypeContext
++   // This is the C++ portion of the context.
++   public long context;
++   public TypeFactory typeFactory;
++-  public DynamicClassLoader classLoader;
++   public final AtomicInteger shutdownFlag = new AtomicInteger();
++   public final AtomicInteger proxyCount = new AtomicInteger();
++   public final List<Thread> shutdownHooks = new ArrayList<>();
++@@ -102,7 +100,6 @@ public class JPypeContext
++       INSTANCE.nativeLib = nativeLib;
++     }
++     INSTANCE.context = context;
++-    INSTANCE.classLoader = (DynamicClassLoader) bootLoader;
++     INSTANCE.typeFactory = new TypeFactoryNative();
++     INSTANCE.initialize();
++     return INSTANCE;
++@@ -116,7 +113,6 @@ public class JPypeContext
++   {
++     // Okay everything is setup so lets give it a go.
++     JPypeReferenceQueue.getInstance().start();
++-    JPypeSignal.installHandlers();
++     TypeManager.getInstance().init(context, INSTANCE.typeFactory);
++ 
++     // Install a shutdown hook to clean up Python resources.
++@@ -289,7 +285,7 @@ public class JPypeContext
++ 
++   public ClassLoader getClassLoader()
++   {
++-    return this.classLoader;
+++    return null;
++   }
++ 
++   public TypeFactory getTypeFactory()
+diff --git a/native/java/org/jpype/JPypeContext.java b/native/java/org/jpype/JPypeContext.java
+index 3ced1aa..ee9a6ba 100644
+--- a/native/java/org/jpype/JPypeContext.java
++++ b/native/java/org/jpype/JPypeContext.java
+@@ -26,7 +26,6 @@ import java.util.Arrays;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.concurrent.atomic.AtomicInteger;
+-import org.jpype.classloader.DynamicClassLoader;
+ import org.jpype.manager.TypeFactory;
+ import org.jpype.manager.TypeFactoryNative;
+ import org.jpype.manager.TypeManager;
+@@ -75,7 +74,6 @@ public class JPypeContext
+   // This is the C++ portion of the context.
+   public long context;
+   public TypeFactory typeFactory;
+-  public DynamicClassLoader classLoader;
+   public final AtomicInteger shutdownFlag = new AtomicInteger();
+   public final AtomicInteger proxyCount = new AtomicInteger();
+   public final List<Thread> shutdownHooks = new ArrayList<>();
+@@ -102,7 +100,6 @@ public class JPypeContext
+       INSTANCE.nativeLib = nativeLib;
+     }
+     INSTANCE.context = context;
+-    INSTANCE.classLoader = (DynamicClassLoader) bootLoader;
+     INSTANCE.typeFactory = new TypeFactoryNative();
+     INSTANCE.initialize();
+     return INSTANCE;
+@@ -116,7 +113,6 @@ public class JPypeContext
+   {
+     // Okay everything is setup so lets give it a go.
+     JPypeReferenceQueue.getInstance().start();
+-    JPypeSignal.installHandlers();
+     TypeManager.getInstance().init(context, INSTANCE.typeFactory);
+ 
+     // Install a shutdown hook to clean up Python resources.
+@@ -289,7 +285,7 @@ public class JPypeContext
+ 
+   public ClassLoader getClassLoader()
+   {
+-    return this.classLoader;
++    return null;
+   }
+ 
+   public TypeFactory getTypeFactory()
+@@ -502,15 +498,12 @@ public class JPypeContext
+ 
+   public boolean isPackage(String s)
+   {
+-    s = JPypeKeywords.safepkg(s);
+-    return JPypePackageManager.isPackage(s);
++    return true; // FIXME consult the hash here.
+   }
+ 
+   public JPypePackage getPackage(String s)
+   {
+     s = JPypeKeywords.safepkg(s);
+-    if (!JPypePackageManager.isPackage(s))
+-      return null;
+     return new JPypePackage(s, JPypePackageManager.getContentMap(s));
+   }
+ 
+diff --git a/native/java/org/jpype/pkg/JPypePackage.java b/native/java/org/jpype/pkg/JPypePackage.java
+index 9a2cf98..84a1a68 100644
+--- a/native/java/org/jpype/pkg/JPypePackage.java
++++ b/native/java/org/jpype/pkg/JPypePackage.java
+@@ -15,16 +15,9 @@
+ **************************************************************************** */
+ package org.jpype.pkg;
+ 
+-import java.io.IOException;
+-import java.io.InputStream;
+ import java.net.URI;
+-import java.nio.Buffer;
+-import java.nio.ByteBuffer;
+-import java.nio.file.Files;
+ import java.nio.file.Path;
+-import java.util.ArrayList;
+ import java.util.Map;
+-import org.jpype.JPypeKeywords;
+ 
+ /**
+  * Representation of a JPackage in Java.
+@@ -69,33 +62,14 @@ public class JPypePackage
+    */
+   public Object getObject(String name)
+   {
+-    URI uri = contents.get(name);
+-    if (uri == null)
+-      return null;
+-    Path p = JPypePackageManager.getPath(uri);
+-
+-    // Directories are packages.  We will just pass them as strings.
+-    if (Files.isDirectory(p))
+-      return p.toString().replace("/", ".");
+-
+-    // Class files need to be probed to make sure they are public.  This
+-    // pattern may have problems with non-exported classes in modules.  But
+-    // thus far we have not seen any cases of that.
+-    if (p.toString().endsWith(".class"))
++    String entity = pkg + "." + name;
++    try
+     {
+-      try
+-      {
+-        // Make sure it is public
+-        if (isPublic(p))
+-        {
+-          // Load the class and return a class type object
+-          return Class.forName(pkg + "." + JPypeKeywords.unwrap(name));
+-        }
+-      } catch (ClassNotFoundException ex)
+-      {
+-      }
++      return Class.forName(entity);
++    } catch (ClassNotFoundException ex)
++    {
++      return entity;
+     }
+-    return null;
+   }
+ 
+   /**
+@@ -107,28 +81,7 @@ public class JPypePackage
+    */
+   public String[] getContents()
+   {
+-    ArrayList<String> out = new ArrayList<>();
+-    for (String key : contents.keySet())
+-    {
+-      URI uri = contents.get(key);
+-      // If there is anything null, then skip it.
+-      if (uri == null)
+-        continue;
+-      Path p = JPypePackageManager.getPath(uri);
+-
+-      // package are acceptable
+-      if (Files.isDirectory(p))
+-        out.add(key);
+-
+-      // classes must be public
+-      else if (uri.toString().endsWith(".class"))
+-      {
+-        // Make sure it is public
+-        if (isPublic(p))
+-          out.add(key);
+-      }
+-    }
+-    return out.toArray(new String[out.size()]);
++    return new String[0];
+   }
+ 
+   /**
+@@ -149,76 +102,7 @@ public class JPypePackage
+    */
+   static boolean isPublic(Path p)
+   {
+-    try (InputStream is = Files.newInputStream(p))
+-    {
+-      // Allocate a three byte buffer for traversing the constant pool.
+-      // The minumum entry is a byte for the type and 2 data bytes.  We
+-      // will read these three bytes and then based on the type advance
+-      // the read pointer to the next entry.
+-      ByteBuffer buffer3 = ByteBuffer.allocate(3);
+-
+-      // Check the magic
+-      ByteBuffer header = ByteBuffer.allocate(4 + 2 + 2 + 2);
+-      is.read(header.array());
+-      ((Buffer) header).rewind();
+-      int magic = header.getInt();
+-      if (magic != (int) 0xcafebabe)
+-        return false;
+-      header.getShort(); // skip major
+-      header.getShort(); // skip minor
+-      short cpitems = header.getShort(); // get the number of items
+-
+-      // Traverse the cp pool
+-      for (int i = 0; i < cpitems - 1; ++i)
+-      {
+-        is.read(buffer3.array());
+-        ((Buffer) buffer3).rewind();
+-        byte type = buffer3.get(); // First byte is the type
+-
+-        // Now based on the entry type we will advance the pointer
+-        switch (type)
+-        {
+-          case 1:  // Strings are variable length
+-            is.skip(buffer3.getShort());
+-            break;
+-          case 7:
+-          case 8:
+-          case 16:
+-          case 19:
+-          case 20:
+-            break;
+-          case 15:
+-            is.skip(1);
+-            break;
+-          case 3:
+-          case 4:
+-          case 9:
+-          case 10:
+-          case 11:
+-          case 12:
+-          case 17:
+-          case 18:
+-            is.skip(2);
+-            break;
+-          case 5:
+-          case 6:
+-            is.skip(6); // double and long are special as they are double entries
+-            i++; // long and double take two slots
+-            break;
+-          default:
+-            return false;
+-        }
+-      }
+-
+-      // Get the flags
+-      is.read(buffer3.array());
+-      ((Buffer) buffer3).rewind();
+-      short flags = buffer3.getShort();
+-      return (flags & 1) == 1; // it is public if bit zero is set
+-    } catch (IOException ex)
+-    {
+-      return false; // If anything goes wrong then it won't be considered a public class.
+-    }
++    return true;
+   }
+ 
+ }
+diff --git a/native/java/org/jpype/pkg/JPypePackageManager.java b/native/java/org/jpype/pkg/JPypePackageManager.java
+index 37a8890..f7b8ec4 100644
+--- a/native/java/org/jpype/pkg/JPypePackageManager.java
++++ b/native/java/org/jpype/pkg/JPypePackageManager.java
+@@ -15,27 +15,10 @@
+ **************************************************************************** */
+ package org.jpype.pkg;
+ 
+-import java.io.IOException;
+ import java.net.URI;
+-import java.net.URISyntaxException;
+-import java.net.URL;
+-import java.nio.file.FileSystem;
+-import java.nio.file.FileSystemNotFoundException;
+-import java.nio.file.FileSystems;
+-import java.nio.file.Files;
+ import java.nio.file.Path;
+-import java.nio.file.Paths;
+-import java.nio.file.ProviderNotFoundException;
+-import java.nio.file.spi.FileSystemProvider;
+-import java.util.ArrayList;
+-import java.util.Arrays;
+-import java.util.Enumeration;
+-import java.util.HashMap;
+-import java.util.LinkedList;
+-import java.util.List;
++import java.util.Collections;
+ import java.util.Map;
+-import org.jpype.JPypeContext;
+-import org.jpype.JPypeKeywords;
+ 
+ /**
+  * Manager for the contents of a package.
+@@ -53,27 +36,6 @@ import org.jpype.JPypeKeywords;
+ public class JPypePackageManager
+ {
+ 
+-  final static List<FileSystem> bases = new ArrayList();
+-//  final static ClassLoader cl = ClassLoader.getSystemClassLoader();
+-  final static List<ModuleDirectory> modules = getModules();
+-  final static FileSystemProvider jfsp = getFileSystemProvider("jar");
+-  final static Map<String, String> env = new HashMap<>();
+-  final static LinkedList<FileSystem> fs = new LinkedList<>();
+-
+-  /**
+-   * Checks if a package exists.
+-   *
+-   * @param name is the name of the package.
+-   * @return true if this is a Java package either in a jar, module, or in the
+-   * boot path.
+-   */
+-  public static boolean isPackage(String name)
+-  {
+-    name = name.replace(".", "/");
+-    if (isModulePackage(name) || isBasePackage(name) || isJarPackage(name))
+-      return true;
+-    return false;
+-  }
+ 
+   /**
+    * Get the list of the contents of a package.
+@@ -83,13 +45,7 @@ public class JPypePackageManager
+    */
+   public static Map<String, URI> getContentMap(String packageName)
+   {
+-    Map<String, URI> out = new HashMap<>();
+-    packageName = packageName.replace(".", "/");
+-    // We need to merge all the file systems into one view like the classloader
+-    getJarContents(out, packageName);
+-    getBaseContents(out, packageName);
+-    getModuleContents(out, packageName);
+-    return out;
++    return Collections.EMPTY_MAP;
+   }
+ 
+   /**
+@@ -102,349 +58,8 @@ public class JPypePackageManager
+    */
+   static Path getPath(URI uri)
+   {
+-    try
+-    {
+-      return Paths.get(uri);
+-    } catch (java.nio.file.FileSystemNotFoundException ex)
+-    {
+-    }
+-
+-    if (uri.getScheme().equals("jar"))
+-    {
+-      try
+-      {
+-        // Limit the number of filesystems open at any one time
+-        fs.add(jfsp.newFileSystem(uri, env));
+-        if (fs.size() > 8)
+-          fs.removeFirst().close();
+-        return Paths.get(uri);
+-      } catch (IOException ex)
+-      {
+-      }
+-    }
+-    throw new FileSystemNotFoundException("Unknown filesystem for " + uri);
+-  }
+-
+-  /**
+-   * Retrieve the Jar file system.
+-   *
+-   * @return
+-   */
+-  private static FileSystemProvider getFileSystemProvider(String str)
+-  {
+-    for (FileSystemProvider fsp : FileSystemProvider.installedProviders())
+-    {
+-      if (fsp.getScheme().equals(str))
+-        return fsp;
+-    }
+-    throw new FileSystemNotFoundException("Unable to find filesystem for " + str);
+-  }
+-
+-//<editor-fold desc="java 8" defaultstate="collapsed">
+-  /**
+-   * Older versions of Java do not have a file system for boot packages. Thus
+-   * rather working through the classloader, we will instead probe java to get
+-   * the rt.jar. Crypto is a special case as it has its own jar. All other
+-   * resources are sourced through the regular jar loading method.
+-   */
+-  static
+-  {
+-    env.put("create", "true");
+-
+-    ClassLoader cl = ClassLoader.getSystemClassLoader();
+-    URI uri = null;
+-    try
+-    {
+-      // This is for Java 8 and earlier in which the API jars are in rt.jar
+-      // and jce.jar
+-      uri = cl.getResource("java/lang/String.class").toURI();
+-      if (uri != null && uri.getScheme().equals("jar"))
+-      {
+-        FileSystem fs = jfsp.newFileSystem(uri, env);
+-        if (fs != null)
+-          bases.add(fs);
+-      }
+-      uri = cl.getResource("javax/crypto/Cipher.class").toURI();
+-      if (uri != null && uri.getScheme().equals("jar"))
+-      {
+-        FileSystem fs = jfsp.newFileSystem(uri, env);
+-        if (fs != null)
+-          bases.add(fs);
+-      }
+-    } catch (URISyntaxException | IOException ex)
+-    {
+-    }
+-  }
+-
+-  private static void getBaseContents(Map<String, URI> out, String packageName)
+-  {
+-    for (FileSystem b : bases)
+-    {
+-      collectContents(out, b.getPath(packageName));
+-    }
+-  }
+-
+-  /**
+-   * Check if a name is a package in the java bootstrap classloader.
+-   *
+-   * @param name
+-   * @return
+-   */
+-  private static boolean isBasePackage(String name)
+-  {
+-    try
+-    {
+-      if (name.isEmpty())
+-        return false;
+-      for (FileSystem jar : bases)
+-      {
+-        if (Files.isDirectory(jar.getPath(name)))
+-          return true;
+-      }
+-      return false;
+-    } catch (Exception ex)
+-    {
+-      throw new RuntimeException("Fail checking package '" + name + "'", ex);
+-    }
+-  }
+-
+-//</editor-fold>
+-//<editor-fold desc="java 9" defaultstate="collapsed">
+-  /**
+-   * Get a list of all modules.
+-   *
+-   * This may be many modules or just a few. Limited distributes created using
+-   * jlink will only have a portion of the usual modules.
+-   *
+-   * @return
+-   */
+-  static List<ModuleDirectory> getModules()
+-  {
+-    ArrayList<ModuleDirectory> out = new ArrayList<>();
+-    try
+-    {
+-      FileSystem fs = FileSystems.getFileSystem(URI.create("jrt:/"));
+-      Path modulePath = fs.getPath("modules");
+-      for (Path module : Files.newDirectoryStream(modulePath))
+-      {
+-        out.add(new ModuleDirectory(module));
+-      }
+-    } catch (ProviderNotFoundException | IOException ex)
+-    {
+-    }
+-    return out;
+-  }
+-
+-  /**
+-   * Check if a name corresponds to a package in a module.
+-   *
+-   * @param name
+-   * @return true if it is a package.
+-   */
+-  private static boolean isModulePackage(String name)
+-  {
+-    if (modules.isEmpty())
+-      return false;
+-    String[] split = name.split("/");
+-    String search = name;
+-    if (split.length > 3)
+-      search = String.join("/", Arrays.copyOfRange(split, 0, 3));
+-    for (ModuleDirectory module : modules)
+-    {
+-      if (module.contains(search))
+-      {
+-        if (Files.isDirectory(module.modulePath.resolve(name)))
+-          return true;
+-      }
+-    }
+-    return false;
+-  }
+-
+-  /**
+-   * Retrieve the contents of a module by package name.
+-   *
+-   * @param out
+-   * @param name
+-   */
+-  private static void getModuleContents(Map<String, URI> out, String name)
+-  {
+-    if (modules.isEmpty())
+-      return;
+-    String[] split = name.split("/");
+-    String search = name;
+-    if (split.length > 3)
+-      search = String.join("/", Arrays.copyOfRange(split, 0, 3));
+-    for (ModuleDirectory module : modules)
+-    {
+-      if (module.contains(search))
+-      {
+-        Path path2 = module.modulePath.resolve(name);
+-        if (Files.isDirectory(path2))
+-          collectContents(out, path2);
+-      }
+-    }
+-  }
+-
+-  /**
+-   * Modules are stored in the jrt filesystem.
+-   *
+-   * However, that is not a simple flat filesystem by path as the jrt files are
+-   * structured by package name. Thus we will need a separate structure which is
+-   * rooted at the top of each module.
+-   */
+-  private static class ModuleDirectory
+-  {
+-
+-    List<String> contents = new ArrayList<>();
+-    private final Path modulePath;
+-
+-    ModuleDirectory(Path module)
+-    {
+-      this.modulePath = module;
+-      listPackages(contents, module, module, 0);
+-    }
+-
+-    boolean contains(String path)
+-    {
+-      for (String s : contents)
+-      {
+-        if (s.equals(path))
+-          return true;
+-      }
+-      return false;
+-    }
+-
+-    private static void listPackages(List<String> o, Path base, Path p, int depth)
+-    {
+-      try
+-      {
+-        if (depth >= 3)
+-          return;
+-        for (Path d : Files.newDirectoryStream(p))
+-        {
+-          if (Files.isDirectory(d))
+-          {
+-            o.add(base.relativize(d).toString());
+-            listPackages(o, base, d, depth + 1);
+-          }
+-        }
+-      } catch (IOException ex)
+-      {
+-      }
+-    }
+-  }
+-
+-//</editor-fold>
+-//<editor-fold desc="jar" defaultstate="collapsed">
+-  /**
+-   * Checks if a name corresponds to package in a jar file or on the classpath
+-   * filesystem.
+-   *
+-   * Classloaders provide a method to get all resources with a given name. This
+-   * is needed because the same package name may appear in multiple jars or
+-   * filesystems. We do not need to disambiguate it here, but just get a listing
+-   * that we can use to find a resource later.
+-   *
+-   * @param name is the name of the package to search for.
+-   * @return true if the name corresponds to a Java package.
+-   */
+-  private static boolean isJarPackage(String name)
+-  {
+-    ClassLoader cl = JPypeContext.getInstance().getClassLoader();
+-    try
+-    {
+-      Enumeration<URL> resources = cl.getResources(name);
+-      while (resources.hasMoreElements())
+-      {
+-        URI uri = resources.nextElement().toURI();
+-        if (Files.isDirectory(getPath(uri)))
+-          return true;
+-      }
+-    } catch (IOException | URISyntaxException ex)
+-    {
+-    }
+-    return false;
+-  }
+-
+-  /**
+-   * Retrieve a list of packages and classes stored on a file system or in a
+-   * jar.
+-   *
+-   * @param out is the map to store the result in.
+-   * @param packageName is the name of the package
+-   */
+-  private static void getJarContents(Map<String, URI> out, String packageName)
+-  {
+-    ClassLoader cl = JPypeContext.getInstance().getClassLoader();
+-    try
+-    {
+-      String path = packageName.replace('.', '/');
+-      Enumeration<URL> resources = cl.getResources(path);
+-      while (resources.hasMoreElements())
+-      {
+-        URI resource = resources.nextElement().toURI();
+-        Path path2 = getPath(resource);
+-        collectContents(out, path2);
+-      }
+-    } catch (IOException | URISyntaxException ex)
+-    {
+-    }
++    return null;
+   }
+ 
+-//</editor-fold>
+-//<editor-fold desc="utility" defaultstate="collapsed">
+-  /**
+-   * Collect the contents from a path.
+-   *
+-   * This operates on jars, modules, and filesystems to collect the names of all
+-   * resources found. We skip over inner classes as those are accessed under
+-   * their included classes. For now we are not screening against other private
+-   * symbols.
+-   *
+-   * @param out is the map to store the result in.
+-   * @param path2 is a path holding a directory to probe.
+-   */
+-  private static void collectContents(Map<String, URI> out, Path path2)
+-  {
+-    try
+-    {
+-      for (Path file : Files.newDirectoryStream(path2))
+-      {
+-        String filename = file.getFileName().toString();
+-        if (Files.isDirectory(file))
+-        {
+-          // Same implementations add the path separator to the end of toString().
+-          if (filename.endsWith(file.getFileSystem().getSeparator()))
+-            filename = filename.substring(0, filename.length() - 1);
+-          out.put(JPypeKeywords.wrap(filename), toURI(file));
+-          continue;
+-        }
+-        // Skip inner classes
+-        if (filename.contains("$"))
+-          continue;
+ 
+-        // Include class files
+-        if (filename.endsWith(".class"))
+-        {
+-          String key = JPypeKeywords.wrap(filename.substring(0, filename.length() - 6));
+-          out.put(key, toURI(file));
+-        }
+-
+-        // We can add other types of files here and import them in JPypePackage
+-        // as required.
+-      }
+-    } catch (IOException ex)
+-    {
+-    }
+-  }
+-
+-  // Java 8 windows bug https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8131067
+-  private static URI toURI(Path path)
+-  {
+-    URI uri = path.toUri();
+-    if (uri.getScheme().equals("jar") && uri.toString().contains("%2520"))
+-      uri = URI.create("jar:" + uri.getRawSchemeSpecificPart().replaceAll("%25", "%"));
+-    return uri;
+-  }
+-//</editor-fold>
+ }

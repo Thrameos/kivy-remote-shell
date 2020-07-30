@@ -67,7 +67,6 @@ class JPypeRecipe(CppCompiledComponentsPythonRecipe):
         # Remove modules that do not apply
         shprint(sh.rm, "-f", join(build_dir, "jpype", "pickle.py"))
         shprint(sh.rm, "-f", join(build_dir, "jpype", "beans.py"))
-        shprint(sh.rm, "-f", join(build_dir, "jpype", "imports.py"))
         shprint(sh.rm, "-f", join(build_dir, "jpype", "_classpath.py"))
         shprint(sh.rm, "-f", join(build_dir, "jpype", "_gui.py"))
         shprint(sh.rm, "-f", join(build_dir, "native", "java", "org", "jpype","JPypeSignal.java"))
