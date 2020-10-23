@@ -53,7 +53,7 @@ Running the test cases
 
 >>> import unittest
 >>> import jpype
->>> import test_array
+>>> from test import test_array
 >>> suite = unittest.defaultTestLoader.loadTestsFromTestCase(test_array.ArrayTestCase)
 >>> unittest.TextTestRunner().run(suite)
 

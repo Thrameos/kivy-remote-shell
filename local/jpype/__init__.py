@@ -8,7 +8,7 @@ import glob
 
 
 class JPypeRecipe(CppCompiledComponentsPythonRecipe):
-    version = '1.0.1'
+    version = '1.1.2'
     url = 'https://github.com/jpype-project/jpype/archive/v{version}.zip'
     name = 'jpype'
     depends = []

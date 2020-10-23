@@ -1,5 +1,5 @@
 diff --git a/jpype/__init__.py b/jpype/__init__.py
-index 306b10b..4f4852d 100644
+index 7f8d3f5b..5e461fcb 100644
 --- a/jpype/__init__.py
 +++ b/jpype/__init__.py
 @@ -20,8 +20,6 @@ from ._jinit import *
@@ -11,12 +11,12 @@ index 306b10b..4f4852d 100644
  from ._jclass import *
  from ._jobject import *
  # There is a bug in lgtm with __init__ imports.  It will be fixed next month.
-@@ -40,27 +38,19 @@ from . import _jio          # lgtm [py/import-own-module]
+@@ -40,16 +38,14 @@ from . import _jio          # lgtm [py/import-own-module]
  from . import protocol      # lgtm [py/import-own-module]
  from . import _jthread      # lgtm [py/import-own-module]
  
 -__all__ = ['java', 'javax']
-+__all__=[]
++__all__ = []
  __all__.extend(_jinit.__all__)
  __all__.extend(_core.__all__)
 -__all__.extend(_classpath.__all__)
@@ -27,24 +27,13 @@ index 306b10b..4f4852d 100644
  __all__.extend(_jcustomizer.__all__)
 -__all__.extend(_gui.__all__)
  
- __version__ = "1.0.2_dev0"
+ __version__ = "1.1.2"
  __version_info__ = __version__.split('.')
- 
- 
--# FIXME these should be deprecated. The old JPackage system is only for
--#  python2 series and generates lots of deceptive classes.  At some point
--#  these two are going to have to go away.
--java = JPackage("java", strict=True)
--javax = JPackage("javax", strict=True)
--
- JMethod = _jpype._JMethod
- JField = _jpype._JField
- 
 diff --git a/jpype/_core.py b/jpype/_core.py
-index d279b85..acf4431 100644
+index 64e32271..3d2547b6 100644
 --- a/jpype/_core.py
 +++ b/jpype/_core.py
-@@ -16,21 +16,17 @@
+@@ -16,13 +16,12 @@
  #
  # *****************************************************************************
  import sys
@@ -59,6 +48,9 @@ index d279b85..acf4431 100644
  
  from ._jvmfinder import *
  
+@@ -33,10 +32,7 @@ from ._jvmfinder import *
+ from importlib import util as _util
+ 
  __all__ = [
 -    'isJVMStarted', 'startJVM', 'shutdownJVM',
 -    'getDefaultJVMPath', 'getJVMVersion', 'isThreadAttachedToJVM', 'attachThreadToJVM',
@@ -68,7 +60,7 @@ index d279b85..acf4431 100644
  ]
  
  
-@@ -93,135 +89,9 @@ def isJVMStarted():
+@@ -99,140 +95,6 @@ def isJVMStarted():
      return _jpype.isStarted()
  
  
@@ -92,9 +84,13 @@ index d279b85..acf4431 100644
 -    return _classpath._SEP.join(out)
 -
 -
- _JVM_started = False
- 
- 
+-_JVM_started = False
+-
+-
+-def interactive():
+-    return bool(getattr(sys, 'ps1', sys.flags.interactive))
+-
+-
 -def startJVM(*args, **kwargs):
 -    """
 -    Starts a Java Virtual Machine.  Without options it will start
@@ -122,12 +118,11 @@ index d279b85..acf4431 100644
 -        will globally change the behavior of all calls using
 -        strings, and a value of True is NOT recommended for newly
 -        developed code.
--
--        The default value for this option during 0.7 series is
--        True.  The option will be False starting in 0.8. A
--        warning will be issued if this option is not specified
--        during the transition period.
--
+-      interrupt (bool): Option to install ^C signal handlers.
+-        If True then ^C will stop the process, else ^C will
+-        transfer control to Python rather than halting.  If
+-        not specified will be False if Python is started as
+-        an interactive shell.
 -
 -    Raises:
 -      OSError: if the JVM cannot be started or is already running.
@@ -181,6 +176,7 @@ index d279b85..acf4431 100644
 -
 -    ignoreUnrecognized = kwargs.pop('ignoreUnrecognized', False)
 -    convertStrings = kwargs.pop('convertStrings', False)
+-    interrupt = kwargs.pop('interrupt', not interactive())
 -
 -    if kwargs:
 -        raise TypeError("startJVM() got an unexpected keyword argument '%s'"
@@ -188,7 +184,7 @@ index d279b85..acf4431 100644
 -
 -    try:
 -        _jpype.startup(jvmpath, tuple(args),
--                       ignoreUnrecognized, convertStrings)
+-                       ignoreUnrecognized, convertStrings, interrupt)
 -        initializeResources()
 -    except RuntimeError as ex:
 -        source = str(ex)
@@ -201,10 +197,11 @@ index d279b85..acf4431 100644
 -                    jvmpath, version)) from ex
 -        raise
 -
- 
+-
  def initializeResources():
      global _JVM_started
-@@ -306,75 +176,6 @@ def initializeResources():
+     _jpype._java_lang_Class = None
+@@ -316,75 +178,6 @@ def initializeResources():
      _JVM_started = True
  
  
@@ -281,7 +278,7 @@ index d279b85..acf4431 100644
      """ Creates a resource lock for a Java object.
  
 diff --git a/jpype/_jthread.py b/jpype/_jthread.py
-index 4c329ff..a3359bd 100644
+index 4c329ffe..a3359bdd 100644
 --- a/jpype/_jthread.py
 +++ b/jpype/_jthread.py
 @@ -42,42 +42,3 @@ class _JThread(object):
@@ -328,7 +325,7 @@ index 4c329ff..a3359bd 100644
 -        """
 -        return _jpype.detachThreadFromJVM()
 diff --git a/jpype/imports.py b/jpype/imports.py
-index 8a73f99..4e19906 100644
+index 8a73f990..4e19906a 100644
 --- a/jpype/imports.py
 +++ b/jpype/imports.py
 @@ -152,18 +152,9 @@ class _JImportLoader:
@@ -388,372 +385,30 @@ index 8a73f99..4e19906 100644
  registerDomain('net')
 +registerDomain('android')
 +registerDomain('dalvik')
-diff --git a/jpype/p0 b/jpype/p0
-new file mode 100644
-index 0000000..6da3c62
---- /dev/null
-+++ b/jpype/p0
-@@ -0,0 +1,358 @@
-+diff --git a/jpype/__init__.py b/jpype/__init__.py
-+index 306b10b..f724243 100644
-+--- a/jpype/__init__.py
-++++ b/jpype/__init__.py
-+@@ -20,8 +20,6 @@ from ._jinit import *
-+ from ._jpackage import *
-+ from ._jproxy import *
-+ from ._core import *
-+-from ._gui import *
-+-from ._classpath import *
-+ from ._jclass import *
-+ from ._jobject import *
-+ # There is a bug in lgtm with __init__ imports.  It will be fixed next month.
-+@@ -43,13 +41,11 @@ from . import _jthread      # lgtm [py/import-own-module]
-+ __all__ = ['java', 'javax']
-+ __all__.extend(_jinit.__all__)
-+ __all__.extend(_core.__all__)
-+-__all__.extend(_classpath.__all__)
-+ __all__.extend(types.__all__)
-+ __all__.extend(_jproxy.__all__)
-+ __all__.extend(_jpackage.__all__)
-+ __all__.extend(_jclass.__all__)
-+ __all__.extend(_jcustomizer.__all__)
-+-__all__.extend(_gui.__all__)
-+ 
-+ __version__ = "1.0.2_dev0"
-+ __version_info__ = __version__.split('.')
-+diff --git a/jpype/_core.py b/jpype/_core.py
-+index d279b85..10f0d01 100644
-+--- a/jpype/_core.py
-++++ b/jpype/_core.py
-+@@ -16,10 +16,8 @@
-+ #
-+ # *****************************************************************************
-+ import sys
-+-import atexit
-+ import _jpype
-+ from . import types as _jtypes
-+-from . import _classpath
-+ from . import _jcustomizer
-+ from . import _jinit
-+ from . import _pykeywords
-+@@ -27,10 +25,7 @@ from . import _pykeywords
-+ from ._jvmfinder import *
-+ 
-+ __all__ = [
-+-    'isJVMStarted', 'startJVM', 'shutdownJVM',
-+-    'getDefaultJVMPath', 'getJVMVersion', 'isThreadAttachedToJVM', 'attachThreadToJVM',
-+-    'detachThreadFromJVM', 'synchronized',
-+-    'JVMNotFoundException', 'JVMNotSupportedException', 'JVMNotRunning'
-++    'isJVMStarted', 'getJVMVersion', 'synchronized',
-+ ]
-+ 
-+ 
-+@@ -93,135 +88,9 @@ def isJVMStarted():
-+     return _jpype.isStarted()
-+ 
-+ 
-+-def _hasClassPath(args):
-+-    for i in args:
-+-        if i.startswith('-Djava.class.path'):
-+-            return True
-+-    return False
-+-
-+-
-+-def _handleClassPath(clsList):
-+-    out = []
-+-    for s in clsList:
-+-        if not isinstance(s, str):
-+-            raise TypeError("Classpath elements must be strings")
-+-        if s.endswith('*'):
-+-            import glob
-+-            out.extend(glob.glob(s + '.jar'))
-+-        else:
-+-            out.append(s)
-+-    return _classpath._SEP.join(out)
-+-
-+-
-+ _JVM_started = False
-+ 
-+ 
-+-def startJVM(*args, **kwargs):
-+-    """
-+-    Starts a Java Virtual Machine.  Without options it will start
-+-    the JVM with the default classpath and jvmpath.
-+-
-+-    The default classpath is determined by ``jpype.getClassPath()``.
-+-    The default jvmpath is determined by ``jpype.getDefaultJVMPath()``.
-+-
-+-    Parameters:
-+-     *args (Optional, str[]): Arguments to give to the JVM.
-+-        The first argument may be the path the JVM.
-+-
-+-    Keyword Arguments:
-+-      jvmpath (str):  Path to the jvm library file,
-+-        Typically one of (``libjvm.so``, ``jvm.dll``, ...)
-+-        Using None will apply the default jvmpath.
-+-      classpath (str,[str]): Set the classpath for the JVM.
-+-        This will override any classpath supplied in the arguments
-+-        list. A value of None will give no classpath to JVM.
-+-      ignoreUnrecognized (bool): Option to ignore
-+-        invalid JVM arguments. Default is False.
-+-      convertStrings (bool): Option to force Java strings to
-+-        cast to Python strings. This option is to support legacy code
-+-        for which conversion of Python strings was the default. This
-+-        will globally change the behavior of all calls using
-+-        strings, and a value of True is NOT recommended for newly
-+-        developed code.
-+-
-+-        The default value for this option during 0.7 series is
-+-        True.  The option will be False starting in 0.8. A
-+-        warning will be issued if this option is not specified
-+-        during the transition period.
-+-
-+-
-+-    Raises:
-+-      OSError: if the JVM cannot be started or is already running.
-+-      TypeError: if an invalid keyword argument is supplied
-+-        or a keyword argument conflicts with the arguments.
-+-
-+-     """
-+-    if _jpype.isStarted():
-+-        raise OSError('JVM is already started')
-+-    global _JVM_started
-+-    if _JVM_started:
-+-        raise OSError('JVM cannot be restarted')
-+-
-+-    args = list(args)
-+-
-+-    # JVM path
-+-    jvmpath = None
-+-    if args:
-+-        # jvm is the first argument the first argument is a path or None
-+-        if not args[0] or not args[0].startswith('-'):
-+-            jvmpath = args.pop(0)
-+-    if 'jvmpath' in kwargs:
-+-        if jvmpath:
-+-            raise TypeError('jvmpath specified twice')
-+-        jvmpath = kwargs.pop('jvmpath')
-+-    if not jvmpath:
-+-        jvmpath = getDefaultJVMPath()
-+-
-+-    # Classpath handling
-+-    if _hasClassPath(args):
-+-        # Old style, specified in the arguments
-+-        if 'classpath' in kwargs:
-+-            # Cannot apply both styles, conflict
-+-            raise TypeError('classpath specified twice')
-+-        classpath = None
-+-    elif 'classpath' in kwargs:
-+-        # New style, as a keywork
-+-        classpath = kwargs.pop('classpath')
-+-    else:
-+-        # Not speficied at all, use the default classpath
-+-        classpath = _classpath.getClassPath()
-+-
-+-    # Handle strings and list of strings.
-+-    if classpath:
-+-        if isinstance(classpath, str):
-+-            args.append('-Djava.class.path=%s' % _handleClassPath([classpath]))
-+-        elif hasattr(classpath, '__iter__'):
-+-            args.append('-Djava.class.path=%s' % _handleClassPath(classpath))
-+-        else:
-+-            raise TypeError("Unknown class path element")
-+-
-+-    ignoreUnrecognized = kwargs.pop('ignoreUnrecognized', False)
-+-    convertStrings = kwargs.pop('convertStrings', False)
-+-
-+-    if kwargs:
-+-        raise TypeError("startJVM() got an unexpected keyword argument '%s'"
-+-                        % (','.join([str(i) for i in kwargs])))
-+-
-+-    try:
-+-        _jpype.startup(jvmpath, tuple(args),
-+-                       ignoreUnrecognized, convertStrings)
-+-        initializeResources()
-+-    except RuntimeError as ex:
-+-        source = str(ex)
-+-        if "UnsupportedClassVersion" in source:
-+-            import re
-+-            match = re.search(r"([0-9]+)\.[0-9]+", source)
-+-            if match:
-+-                version = int(match.group(1)) - 44
-+-                raise RuntimeError("%s is older than required Java version %d" % (
-+-                    jvmpath, version)) from ex
-+-        raise
-+-
-+ 
-+ def initializeResources():
-+     global _JVM_started
-+@@ -306,75 +175,6 @@ def initializeResources():
-+     _JVM_started = True
-+ 
-+ 
-+-def shutdownJVM():
-+-    """ Shuts down the JVM.
-+-
-+-    This method shuts down the JVM and disables access to existing
-+-    Java objects. Due to limitations in the JPype, it is not possible to
-+-    restart the JVM after being terminated.
-+-    """
-+-    import threading
-+-    if threading.current_thread() is not threading.main_thread():
-+-        raise RuntimeError("Shutdown must be called from main thread")
-+-    _jpype.shutdown()
-+-
-+-
-+-# In order to shutdown cleanly we need the reference queue stopped
-+-# otherwise, we can experience a crash if a Java thread is waiting
-+-# for the GIL.
-+-def _JTerminate():
-+-    try:
-+-        _jpype.shutdown()
-+-    except RuntimeError:
-+-        pass
-+-
-+-
-+-atexit.register(_JTerminate)
-+-
-+-
-+-@deprecated("java.lang.Thread.isAttached")
-+-def isThreadAttachedToJVM():
-+-    """ Checks if a thread is attached to the JVM.
-+-
-+-    Python automatically attaches threads when a Java method is called.
-+-    This creates a resource in Java for the Python thread. This method
-+-    can be used to check if a Python thread is currently attached so that
-+-    it can be disconnected prior to thread termination to prevent leaks.
-+-
-+-    Returns:
-+-      True if the thread is attached to the JVM, False if the thread is
-+-      not attached or the JVM is not running.
-+-    """
-+-    return _jpype.isThreadAttachedToJVM()
-+-
-+-
-+-@deprecated("java.lang.Thread.attach")
-+-def attachThreadToJVM():
-+-    """ Attaches a thread to the JVM.
-+-
-+-    The function manually connects a thread to the JVM to allow access to
-+-    Java objects and methods. JPype automatically attaches when a Java
-+-    resource is used, so a call to this is usually not needed.
-+-
-+-    Raises:
-+-      RuntimeError: If the JVM is not running.
-+-    """
-+-    _jpype.attachThreadToJVM()
-+-
-+-
-+-@deprecated("java.lang.Thread.detach")
-+-def detachThreadFromJVM():
-+-    """ Detaches a thread from the JVM.
-+-
-+-    This function detaches the thread and frees the associated resource in
-+-    the JVM. For codes making heavy use of threading this should be used
-+-    to prevent resource leaks. The thread can be reattached, so there
-+-    is no harm in detaching early or more than once. This method cannot fail
-+-    and there is no harm in calling it when the JVM is not running.
-+-    """
-+-    _jpype.detachThreadFromJVM()
-+-
-+-
-+ def synchronized(obj):
-+     """ Creates a resource lock for a Java object.
-+ 
-+diff --git a/jpype/_jthread.py b/jpype/_jthread.py
-+index 4c329ff..a3359bd 100644
-+--- a/jpype/_jthread.py
-++++ b/jpype/_jthread.py
-+@@ -42,42 +42,3 @@ class _JThread(object):
-+           not attached or the JVM is not running.
-+         """
-+         return _jpype.isThreadAttachedToJVM()
-+-
-+-    @staticmethod
-+-    def attach():
-+-        """ Attaches the current thread to the JVM as a user thread.
-+-
-+-        User threads that are attached to the JVM will prevent the JVM from
-+-        shutting down until the thread is terminated or detached.  To convert
-+-        a daemon thread to a main thread, the thread must first be detached.
-+-
-+-        Raises:
-+-          RuntimeError: If the JVM is not running.
-+-        """
-+-        return _jpype.attachThreadToJVM()
-+-
-+-    @staticmethod
-+-    def attachAsDaemon():
-+-        """ Attaches the current thread to the JVM as a daemon.
-+-
-+-        Daemon threads act as background tasks and do not prevent the JVM from
-+-        shutdown normally.  JPype automatically attaches any threads that call
-+-        Java resources as daemon threads.  To convert a daemon thread to a user
-+-        thread, the thread must first be detached.
-+-
-+-        Raises:
-+-          RuntimeError: If the JVM is not running.
-+-        """
-+-        return _jpype.attachThreadAsDaemon()
-+-
-+-    @staticmethod
-+-    def detach():
-+-        """ Detaches a thread from the JVM.
-+-
-+-        This function detaches the thread and frees the associated resource in
-+-        the JVM. For codes making heavy use of threading this should be used
-+-        to prevent resource leaks. The thread can be reattached, so there
-+-        is no harm in detaching early or more than once. This method cannot fail
-+-        and there is no harm in calling it when the JVM is not running.
-+-        """
-+-        return _jpype.detachThreadFromJVM()
-+diff --git a/native/java/org/jpype/JPypeContext.java b/native/java/org/jpype/JPypeContext.java
-+index 3ced1aa..ffeafaa 100644
-+--- a/native/java/org/jpype/JPypeContext.java
-++++ b/native/java/org/jpype/JPypeContext.java
-+@@ -26,7 +26,6 @@ import java.util.Arrays;
-+ import java.util.List;
-+ import java.util.Map;
-+ import java.util.concurrent.atomic.AtomicInteger;
-+-import org.jpype.classloader.DynamicClassLoader;
-+ import org.jpype.manager.TypeFactory;
-+ import org.jpype.manager.TypeFactoryNative;
-+ import org.jpype.manager.TypeManager;
-+@@ -75,7 +74,6 @@ public class JPypeContext
-+   // This is the C++ portion of the context.
-+   public long context;
-+   public TypeFactory typeFactory;
-+-  public DynamicClassLoader classLoader;
-+   public final AtomicInteger shutdownFlag = new AtomicInteger();
-+   public final AtomicInteger proxyCount = new AtomicInteger();
-+   public final List<Thread> shutdownHooks = new ArrayList<>();
-+@@ -102,7 +100,6 @@ public class JPypeContext
-+       INSTANCE.nativeLib = nativeLib;
-+     }
-+     INSTANCE.context = context;
-+-    INSTANCE.classLoader = (DynamicClassLoader) bootLoader;
-+     INSTANCE.typeFactory = new TypeFactoryNative();
-+     INSTANCE.initialize();
-+     return INSTANCE;
-+@@ -116,7 +113,6 @@ public class JPypeContext
-+   {
-+     // Okay everything is setup so lets give it a go.
-+     JPypeReferenceQueue.getInstance().start();
-+-    JPypeSignal.installHandlers();
-+     TypeManager.getInstance().init(context, INSTANCE.typeFactory);
-+ 
-+     // Install a shutdown hook to clean up Python resources.
-+@@ -289,7 +285,7 @@ public class JPypeContext
-+ 
-+   public ClassLoader getClassLoader()
-+   {
-+-    return this.classLoader;
-++    return null;
-+   }
-+ 
-+   public TypeFactory getTypeFactory()
+diff --git a/native/common/jp_classloader.cpp b/native/common/jp_classloader.cpp
+index ea22d6b6..f6cfde0b 100644
+--- a/native/common/jp_classloader.cpp
++++ b/native/common/jp_classloader.cpp
+@@ -55,6 +55,7 @@ JPClassLoader::JPClassLoader(JPJavaFrame& frame)
+ 	m_SystemClassLoader = JPObjectRef(frame,
+ 			frame.CallStaticObjectMethodA(classLoaderClass, getSystemClassLoader, 0));
+ 
++#ifndef ANDROID
+ 	jclass dynamicLoaderClass = frame.getEnv()->FindClass("org/jpype/classloader/DynamicClassLoader");
+ 	if (dynamicLoaderClass != NULL)
+ 	{
+@@ -105,6 +106,9 @@ JPClassLoader::JPClassLoader(JPJavaFrame& frame)
+ 	jmethodID newDyLoader = frame.GetMethodID(dyClass, "<init>", "(Ljava/lang/ClassLoader;)V");
+ 	v[0].l = cl;
+ 	m_BootLoader = JPObjectRef(frame, frame.NewObjectA(dyClass, newDyLoader, v));
++#else
++	m_BootLoader = m_SystemClassLoader;
++#endif
+ 
+ 	JP_TRACE_OUT;  // GCOVR_EXCL_LINE
+ }
 diff --git a/native/java/org/jpype/JPypeContext.java b/native/java/org/jpype/JPypeContext.java
-index 3ced1aa..ee9a6ba 100644
+index 56e28135..0bf7f6cc 100644
 --- a/native/java/org/jpype/JPypeContext.java
 +++ b/native/java/org/jpype/JPypeContext.java
 @@ -26,7 +26,6 @@ import java.util.Arrays;
@@ -764,31 +419,32 @@ index 3ced1aa..ee9a6ba 100644
  import org.jpype.manager.TypeFactory;
  import org.jpype.manager.TypeFactoryNative;
  import org.jpype.manager.TypeManager;
-@@ -75,7 +74,6 @@ public class JPypeContext
-   // This is the C++ portion of the context.
-   public long context;
-   public TypeFactory typeFactory;
--  public DynamicClassLoader classLoader;
-   public final AtomicInteger shutdownFlag = new AtomicInteger();
-   public final AtomicInteger proxyCount = new AtomicInteger();
-   public final List<Thread> shutdownHooks = new ArrayList<>();
-@@ -102,7 +100,6 @@ public class JPypeContext
-       INSTANCE.nativeLib = nativeLib;
+@@ -76,7 +75,6 @@ public class JPypeContext
+   private long context;
+   private TypeFactory typeFactory;
+   private TypeManager typeManager;
+-  private DynamicClassLoader classLoader;
+   private final AtomicInteger shutdownFlag = new AtomicInteger();
+   private final List<Thread> shutdownHooks = new ArrayList<>();
+   private final List<Runnable> postHooks = new ArrayList<>();
+@@ -100,7 +98,6 @@ public class JPypeContext
+       System.load(nativeLib);
      }
      INSTANCE.context = context;
 -    INSTANCE.classLoader = (DynamicClassLoader) bootLoader;
      INSTANCE.typeFactory = new TypeFactoryNative();
-     INSTANCE.initialize();
-     return INSTANCE;
-@@ -116,7 +113,6 @@ public class JPypeContext
-   {
+     INSTANCE.typeManager = new TypeManager(context, INSTANCE.typeFactory);
+     INSTANCE.initialize(interrupt);
+@@ -116,8 +113,6 @@ public class JPypeContext
      // Okay everything is setup so lets give it a go.
+     this.typeManager.init();
      JPypeReferenceQueue.getInstance().start();
--    JPypeSignal.installHandlers();
-     TypeManager.getInstance().init(context, INSTANCE.typeFactory);
+-    if (!interrupt)
+-      JPypeSignal.installHandlers();
  
      // Install a shutdown hook to clean up Python resources.
-@@ -289,7 +285,7 @@ public class JPypeContext
+     Runtime.getRuntime().addShutdownHook(new Thread(new Runnable()
+@@ -288,7 +283,7 @@ public class JPypeContext
  
    public ClassLoader getClassLoader()
    {
@@ -797,7 +453,42 @@ index 3ced1aa..ee9a6ba 100644
    }
  
    public TypeFactory getTypeFactory()
-@@ -502,15 +498,12 @@ public class JPypeContext
+@@ -468,34 +463,6 @@ public class JPypeContext
+    */
+   public static void clearInterrupt(boolean x) throws InterruptedException
+   {
+-    try
+-    {
+-      Thread th = Thread.currentThread();
+-
+-      // Only relevant if this is the main thread for signal handling
+-      if (th != JPypeSignal.main)
+-        return;
+-
+-      // Unconditionally clear the interrupt flag if we are called from 
+-      // C++.  This happens when a field get() or method call() is 
+-      // invoked.
+-      if (!x)
+-        JPypeSignal.acknowledgePy();
+-
+-      // Check if this thread is interrupted
+-      if (th.isInterrupted())
+-      {
+-        // Clear the flag in C++
+-        JPypeSignal.acknowledgePy();
+-        
+-        // Clear the flag in Java
+-        Thread.sleep(1);
+-      }
+-    } catch (InterruptedException ex)
+-    {
+-      if (x)
+-        throw ex;
+-    }
+   }
+ 
+   public long getExcClass(Throwable th)
+@@ -538,15 +505,12 @@ public class JPypeContext
  
    public boolean isPackage(String s)
    {
@@ -814,8 +505,165 @@ index 3ced1aa..ee9a6ba 100644
      return new JPypePackage(s, JPypePackageManager.getContentMap(s));
    }
  
+diff --git a/native/java/org/jpype/classloader/DynamicClassLoader.java b/native/java/org/jpype/classloader/DynamicClassLoader.java
+deleted file mode 100644
+index 37dd7ead..00000000
+--- a/native/java/org/jpype/classloader/DynamicClassLoader.java
++++ /dev/null
+@@ -1,139 +0,0 @@
+-package org.jpype.classloader;
+-
+-import java.io.ByteArrayOutputStream;
+-import java.io.FileNotFoundException;
+-import java.io.IOException;
+-import java.io.InputStream;
+-import java.net.MalformedURLException;
+-import java.net.URL;
+-import java.net.URLClassLoader;
+-import java.net.URLConnection;
+-import java.nio.file.FileSystems;
+-import java.nio.file.FileVisitResult;
+-import java.nio.file.Files;
+-import java.nio.file.Path;
+-import java.nio.file.PathMatcher;
+-import java.nio.file.SimpleFileVisitor;
+-import java.nio.file.attribute.BasicFileAttributes;
+-import java.util.LinkedList;
+-import java.util.List;
+-
+-public class DynamicClassLoader extends ClassLoader
+-{
+-
+-  List<ClassLoader> loaders = new LinkedList<>();
+-
+-  public DynamicClassLoader(ClassLoader parent)
+-  {
+-    super(parent);
+-  }
+-
+-  /**
+-   * Add a set of jars to the classpath.
+-   *
+-   * @param root
+-   * @param glob
+-   * @throws IOException
+-   */
+-  public void addFiles(Path root, String glob) throws IOException
+-  {
+-    final PathMatcher pathMatcher = FileSystems.getDefault().getPathMatcher(glob);
+-
+-    List<URL> urls = new LinkedList<>();
+-    Files.walkFileTree(root, new SimpleFileVisitor<Path>()
+-    {
+-
+-      @Override
+-      public FileVisitResult visitFile(Path path,
+-              BasicFileAttributes attrs) throws IOException
+-      {
+-        if (pathMatcher.matches(root.relativize(path)))
+-        {
+-          URL url = path.toUri().toURL();
+-          urls.add(url);
+-        }
+-        return FileVisitResult.CONTINUE;
+-      }
+-
+-      @Override
+-      public FileVisitResult visitFileFailed(Path file, IOException exc)
+-              throws IOException
+-      {
+-        return FileVisitResult.CONTINUE;
+-      }
+-    });
+-
+-    loaders.add(new URLClassLoader(urls.toArray(new URL[urls.size()])));
+-  }
+-
+-  public void addFile(Path path) throws FileNotFoundException
+-  {
+-    try
+-    {
+-      if (!Files.exists(path))
+-        throw new FileNotFoundException(path.toString());
+-      URL[] urls = new URL[]
+-      {
+-        path.toUri().toURL()
+-      };
+-      loaders.add(new URLClassLoader(urls));
+-    } catch (MalformedURLException ex)
+-    {
+-      // This should never happen
+-      throw new RuntimeException(ex);
+-    }
+-  }
+-
+-  /**
+-   * Loads a class from the class loader.
+-   *
+-   * @param name is the name of the class with java class notation (using dots).
+-   * @return the class
+-   * @throws ClassNotFoundException was not found by the class loader.
+-   * @throws ClassFormatError if the class byte code was invalid.
+-   */
+-  @Override
+-  public Class findClass(String name) throws ClassNotFoundException, ClassFormatError
+-  {
+-    String aname = name.replace('.', '/') + ".class";
+-    URL url = this.getResource(aname);
+-    if (url == null)
+-      throw new ClassNotFoundException(name);
+-
+-    try
+-    {
+-      URLConnection connection = url.openConnection();
+-      try (InputStream is = connection.getInputStream())
+-      {
+-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+-        int bytes;
+-        byte[] d = new byte[1024];
+-        while ((bytes = is.read(d, 0, d.length)) != -1)
+-        {
+-          buffer.write(d, 0, bytes);
+-        }
+-
+-        buffer.flush();
+-        byte[] data = buffer.toByteArray();
+-        return defineClass(name, data, 0, data.length);
+-      }
+-    } catch (IOException ex)
+-    {
+-    }
+-    throw new ClassNotFoundException(name);
+-  }
+-
+-  @Override
+-  public URL getResource(String name)
+-  {
+-    for (ClassLoader cl : this.loaders)
+-    {
+-      URL url = cl.getResource(name);
+-      if (url == null)
+-        continue;
+-      return url;
+-    }
+-    return null;
+-  }
+-
+-}
+diff --git a/native/java/org/jpype/manager/TypeManager.java b/native/java/org/jpype/manager/TypeManager.java
+index d747a702..1ee52d15 100644
+--- a/native/java/org/jpype/manager/TypeManager.java
++++ b/native/java/org/jpype/manager/TypeManager.java
+@@ -33,7 +33,6 @@ import java.util.LinkedList;
+ import java.util.List;
+ import java.util.TreeSet;
+ import org.jpype.JPypeContext;
+-import org.jpype.JPypeSignal;
+ import org.jpype.proxy.JPypeProxy;
+ 
+ /**
 diff --git a/native/java/org/jpype/pkg/JPypePackage.java b/native/java/org/jpype/pkg/JPypePackage.java
-index 9a2cf98..84a1a68 100644
+index 9a2cf98c..84a1a688 100644
 --- a/native/java/org/jpype/pkg/JPypePackage.java
 +++ b/native/java/org/jpype/pkg/JPypePackage.java
 @@ -15,16 +15,9 @@
@@ -984,7 +832,7 @@ index 9a2cf98..84a1a68 100644
  
  }
 diff --git a/native/java/org/jpype/pkg/JPypePackageManager.java b/native/java/org/jpype/pkg/JPypePackageManager.java
-index 37a8890..f7b8ec4 100644
+index 37a88907..f7b8ec48 100644
 --- a/native/java/org/jpype/pkg/JPypePackageManager.java
 +++ b/native/java/org/jpype/pkg/JPypePackageManager.java
 @@ -15,27 +15,10 @@
@@ -1410,3 +1258,33 @@ index 37a8890..f7b8ec4 100644
 -  }
 -//</editor-fold>
  }
+diff --git a/native/python/pyjp_module.cpp b/native/python/pyjp_module.cpp
+index bfc94b1b..4108c4cf 100644
+--- a/native/python/pyjp_module.cpp
++++ b/native/python/pyjp_module.cpp
+@@ -216,7 +216,6 @@ int Py_IsInstanceSingle(PyObject* obj, PyTypeObject* type)
+ }
+ 
+ #ifndef ANDROID
+-extern JNIEnv *Android_JNI_GetEnv();
+ 
+ static PyObject* PyJPModule_startup(PyObject* module, PyObject* pyargs)
+ {
+@@ -636,14 +635,17 @@ static PyObject* PyJPModule_fault(PyObject *module, PyObject *args)
+ 
+ #ifdef ANDROID
+ 
++extern JNIEnv *Android_JNI_GetEnv();
+ static PyObject *PyJPModule_bootstrap(PyObject *module)
+ {
++	JP_PY_TRY("bootstrap");
+ 	// After all the internals are created we can connect the API with the internal module
+ 	JNIEnv * env = Android_JNI_GetEnv();
+ 	JPContext_global->attachJVM(env);
+ 	PyJPModule_installGC(module);
+ 	PyJPModule_loadResources(module);
+ 	Py_RETURN_NONE;
++	JP_PY_CATCH(NULL);
+ }
+ #endif
+ 
